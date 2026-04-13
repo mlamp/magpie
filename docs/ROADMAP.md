@@ -40,9 +40,9 @@ Research pass (tracked separately) must land findings in `docs/research/` for th
 1. `cratetorrent` (small, literate Rust engine).
 2. `anacrolix/torrent`: `torrent.go`, `peerconn.go`, `storage/`.
 3. `libtorrent-rasterbar`: `piece_picker.cpp`, `alert.hpp`, `disk_io_thread.cpp`.
-4. `librqbit`: session lifecycle + `librqbit-utp`.
+4. `librqbit`: session lifecycle. (Note: `librqbit-utp` does not exist in the current tree — uTP study goes to rakshasa + rasterbar. See [research/SUMMARY.md](research/SUMMARY.md).)
 5. `MonoTorrent`: `PieceHashesV2`, `TorrentManager` public API.
-6. `lambdaclass/libtorrent-rs`: Rust v2 reference — check before freezing the v2 data model.
+6. `lambdaclass/libtorrent-rs`: originally listed as a Rust v2 reference — **but this repo is v1-only** per its own README. Retain for Rust bencode/metainfo shape, not v2. See [research/SUMMARY.md](research/SUMMARY.md).
 
 ## Open items
 

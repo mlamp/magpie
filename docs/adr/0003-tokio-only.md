@@ -12,7 +12,15 @@ Rust async ecosystem has multiple runtimes (tokio, smol/async-std, glommio, mono
 
 ## Decision
 
-<!-- Commit to tokio-only. Revisit only if a concrete benchmark shows a single-runtime design hurts a real consumer's workload. -->
+**Tokio-only.** All async primitives, timers, I/O, and task scheduling go through tokio. Revisit only if a concrete benchmark against a real consumer workload shows the single-runtime choice hurts.
+
+## Research findings
+
+See [docs/research/SUMMARY.md](../research/SUMMARY.md) §"ADR 0003". Key inputs:
+- cratetorrent ([001](../research/001-cratetorrent.md) §7) is tokio-only; no documented pain from the choice.
+- librqbit ([004](../research/004-librqbit.md) §1) is tokio-only; `CancellationToken` + `DropGuard` give a clean cascade-cancellation pattern that we will borrow.
+- anacrolix is Go, rasterbar is C++ — neither has a runtime choice directly comparable.
+- Our only consumer (lightorrent) is tokio-based; runtime-agnostic design would have zero payoff.
 
 ## Consequences
 

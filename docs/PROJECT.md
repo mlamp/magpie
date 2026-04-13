@@ -69,7 +69,7 @@ Workspace under `magpie`:
 | Disk I/O pool off the net loop | libtorrent-rasterbar | Net never stalls on fsync |
 | Pluggable storage trait | anacrolix/torrent | Future-proofs mmap/sqlite/S3 |
 | Vectorised `pwritev`/`preadv` | cratetorrent | Fewer syscalls at gigabit |
-| Userspace uTP + metrics | librqbit-utp | No kernel dep, observable |
+| Userspace uTP + metrics | rakshasa, rasterbar | No kernel dep, observable (librqbit has no uTP in current tree — see [research](research/SUMMARY.md)) |
 | Azureus peer-ID builder | MonoTorrent | Configurable client identity |
 | Single-threaded epoll aesthetic | rakshasa | "Lean and mean" discipline |
 | Merkle layer peer-fetch | MonoTorrent, libtorrent 2.x | Correct BEP 52 when metadata omits layers |

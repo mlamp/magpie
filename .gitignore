@@ -1,5 +1,8 @@
 /target/
 /_tmp/
+# _placeholder/ is only populated on the chore/crates-io-placeholder branch
+# for the crates.io name reservation. Do not commit it to main.
+/_placeholder/
 .DS_Store
 *.swp
 .idea/
