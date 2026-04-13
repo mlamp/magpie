@@ -47,7 +47,7 @@ Short notes on options we did not pick, and why.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-subcrate-vs-feature-dht-utp.md) | Subcrate vs. feature for DHT and uTP | proposed (research done) |
-| [0002](0002-event-bus-broadcast.md) | Event bus on tokio::sync::broadcast | proposed (research done) |
+| [0002](0002-event-bus-alert-ring.md) | Event bus: custom rasterbar-style alert ring | proposed (research done) |
 | [0003](0003-tokio-only.md) | Tokio-only runtime | proposed (research done) |
 | 0004 | Storage trait shape (anacrolix-style PieceHandle) | open, to be drafted in M0 |
 | 0005 | Piece-picker architecture (B-tree + availability key) | open, to be drafted in M0 |

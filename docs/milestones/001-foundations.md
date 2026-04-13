@@ -50,7 +50,7 @@ Stand up the non-network spine of magpie: workspace layout, on-disk data structu
 ## Open questions
 
 - [ADR-0001](../adr/0001-subcrate-vs-feature-dht-utp.md) — subcrate vs. feature for `dht`/`utp`. Resolve **before M0 close** so M3/M4 start on solid ground.
-- [ADR-0002](../adr/0002-event-bus-broadcast.md) — broadcast vs. custom event bus. Revisit if broadcast proves inadequate for per-block streams during M0 picker integration.
+- [ADR-0002](../adr/0002-event-bus-alert-ring.md) — custom rasterbar-style alert ring (supersedes the earlier broadcast-based proposal). Deliver the ring under `magpie-bt-core/src/alerts/` during M0 with fuzzing + benchmarks.
 - [ADR-0003](../adr/0003-tokio-only.md) — confirm at M0 kickoff.
 - **Benchmark harness**: custom in-memory swarm in CI vs. real public torrents. Pick one during M0; scaffold under `magpie-bt-core/benches/`.
 - **Test-fixture policy**: source, size ceiling, and license of the real .torrent corpus under `magpie-bt-metainfo/tests/fixtures/`. Prefer small public-domain content (e.g. Sintel, Big Buck Bunny torrents) + synthetic torrents generated in tests.

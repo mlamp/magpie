@@ -46,7 +46,7 @@ Research surfaced three factual problems in our own docs:
 |---|---|---|
 | Piece picker | B-tree with `(availability, priority, partial)` key, rarest-first baseline, endgame at `free_count == 0`. Speed-class affinity deferred to M5. | anacrolix §3, rasterbar §2, cratetorrent §2 |
 | Storage | Trait: `Storage → TorrentStorage → PieceHandle`; `PieceHandle: AsyncReadAt + AsyncWriteAt`. File backend uses `pwritev`/`preadv` (Linux) + portable fallback (macOS/Windows). In-memory backend for tests. Bounded write queue with backpressure. | anacrolix §2, cratetorrent §3, rasterbar §3 |
-| Event bus | `tokio::sync::broadcast<TorrentEvent>` bounded; slow consumers get `Lagged`, never block engine. Snapshot API for late subscribers. | Our design; validated by librqbit gap §2 + anacrolix callback pain §8 |
+| Event bus | Custom rasterbar-style alert ring: double-buffered arena + generation swap + category mask + batch drain. Zero heap alloc per event in steady state. Single primary reader; consumer-side fan-out helper for sidecars. See [ADR 0002](../adr/0002-event-bus-alert-ring.md). | rasterbar §1; project perf preference |
 | Hash data model | `enum PieceHash { V1([u8;20]), V2([u8;32]) }`, `enum InfoHash { V1, V2, Hybrid { v1, v2 } }`, merkle helpers isolated in their own module. | MonoTorrent §2, rasterbar v2 §4, anacrolix merkle §6 |
 | Peer-ID builder | `PeerIdBuilder { client_code: [u8;2], version: [u8;4] }` → Azureus-style `-CCVVVV-<random>`, documented randomness source. | librqbit gap §6; MonoTorrent pattern (minus hardcoding) |
 | Concurrency shape | Per-torrent task owns picker + in-progress piece state. Peers talk to it via mpsc. Session `Arc<Session>` holds global state (DHT, rate limits). | librqbit §1, cratetorrent §7 (but without cratetorrent's nested `RwLock<_, RwLock<_>>`) |
@@ -61,17 +61,17 @@ Research surfaced three factual problems in our own docs:
 
 Research rationale: rasterbar and anacrolix both keep DHT and uTP functionally isolated from the core torrent engine. rasterbar specifically separates the disk/net/DHT threading domains. librqbit's current tree lacks uTP entirely — which underlines the need for clean isolation (we can compose, but only if boundaries are strict). Compile-time isolation via subcrates (`magpie-bt-dht`, `magpie-bt-utp`) prevents accidental cross-cutting coupling and keeps small builds small.
 
-### ADR 0002 — Event bus on `tokio::sync::broadcast`
+### ADR 0002 — Event bus: custom rasterbar-style alert ring
 
-**Direction**: Accept. Use `broadcast<TorrentEvent>` for torrent-level events; add bounded mpsc for any per-block / per-request stream we later expose.
+**Direction**: Accept the custom ring. Build a double-buffered, arena-backed, category-masked alert queue under `magpie-bt-core/src/alerts/`. High-frequency per-block/per-request streams use dedicated bounded `mpsc` channels, not the alert ring.
 
 Research rationale:
-- librqbit's polling gap is the direct motivation (004 §2).
-- anacrolix's synchronous callbacks under locks is documented pain (002 §4, §8).
-- rasterbar's ring-buffered alerts + generation counter is the most scalable design but overbuilds for our scale; broadcast gives us the same "non-blocking, typed events" shape with 10x less code (003 §1).
-- cratetorrent's unbounded mpsc alerts work for one consumer but don't scale to multi-subscriber.
+- rasterbar's ring is the reference design for sustained-throughput BT event delivery at gigabit scale (003 §1). Magpie is a library; perf regressions are felt by every consumer.
+- librqbit's polling is the gap magpie must close (004 §2).
+- anacrolix's sync callbacks under locks is a documented failure mode (002 §4, §8).
+- `tokio::sync::broadcast` was considered and rejected: per-subscriber deep clones scale poorly at 8000+ events/s, and `broadcast<Arc<T>>` still pays a heap alloc per event with no batch drain.
 
-Consequence to document in the ADR: `Lagged` is the cost of slow subscribers — consumers must treat `Recv::Lagged(n)` as "fetch current snapshot and resume". Add a `TorrentHandle::snapshot()` API for that resync.
+Consequence: overflow policy is explicit — `Alert::Dropped(n)` sentinel enqueued when consumer falls behind; producer never blocks. Consumers that retain alerts past a generation swap must copy them out (enforced by lifetimes).
 
 ### ADR 0003 — Tokio-only runtime
 
