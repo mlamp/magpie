@@ -1,0 +1,23 @@
+[package]
+name = "magpie-bt-wire"
+description = "Peer wire protocol codec for the magpie BitTorrent library."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["bittorrent", "wire", "protocol"]
+categories = ["network-programming", "parser-implementations"]
+readme = "README.md"
+
+[dependencies]
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

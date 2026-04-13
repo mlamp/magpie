@@ -23,7 +23,8 @@ Every item here must be mechanically checkable, not a judgement call.
 4. **Docs** — every new `pub` item has a rustdoc summary; `cargo doc -D warnings` clean.
 5. **ADRs** — any non-trivial design decision made during this milestone has an ADR under `../adr/`.
 6. **CHANGELOG** — `## [Unreleased]` reflects all public-API changes from this milestone.
-7. **Milestone-specific criteria** — …
+7. **BDD coverage** — any BEP implemented in this milestone has a `.feature` file under `crates/magpie-bt/tests/features/bep-NNNN-*.feature`, covered by step definitions, and its row in [`../bep-coverage.md`](../bep-coverage.md) is updated.
+8. **Milestone-specific criteria** — …
 
 ## Open questions
 

@@ -1,0 +1,22 @@
+[package]
+name = "magpie-bt-bencode-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+magpie-bt-bencode = { path = ".." }
+
+[[bin]]
+name = "bencode"
+path = "fuzz_targets/bencode.rs"
+test = false
+doc = false
+bench = false
+
+# Exclude from workspace — cargo-fuzz has its own target dir.
+[workspace]

@@ -1,0 +1,37 @@
+[package]
+name = "magpie-bt-core"
+description = "Engine core (picker, storage trait, alert ring, session orchestration) for the magpie BitTorrent library."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["bittorrent", "engine", "torrent"]
+categories = ["network-programming", "asynchronous"]
+readme = "README.md"
+
+[dependencies]
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.0.1" }
+magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.0.1" }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "io-util", "time", "macros"] }
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[[bench]]
+name = "picker"
+harness = false
+
+[[bench]]
+name = "alert_ring"
+harness = false
+
+[lints]
+workspace = true

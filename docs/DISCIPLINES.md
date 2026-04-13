@@ -22,6 +22,7 @@ The bars every change must clear. Scan in ≤2 minutes. Anything that isn't enfo
 | Property (`proptest`) | `proptest/` or `#[cfg(test)] mod proptest` | `-bencode`, `-metainfo`, piece picker |
 | Fuzz (`cargo-fuzz`) | `fuzz/fuzz_targets/` | parsers from M0 (`bencode`, `metainfo`); wire codec from M1 |
 | Benchmarks (`criterion`) | `benches/` | hot paths: picker, bencode decode, storage write |
+| BDD (`cucumber-rs`) | `crates/magpie-bt/tests/features/`, `crates/magpie-bt/tests/steps/` | every BEP in flight; one `.feature` file per BEP; tracked in [`bep-coverage.md`](bep-coverage.md) |
 | Interop (real clients) | `tests/interop/` | from **M2** onward (milestone gate) |
 
 **Coverage thresholds** (`cargo-llvm-cov`):

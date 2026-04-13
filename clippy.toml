@@ -4,6 +4,12 @@
 # docs/DISCIPLINES.md.
 msrv = "1.94"
 
+# Proper nouns / acronyms that should not trigger `clippy::doc_markdown`.
+doc-valid-idents = [
+    "BitTorrent",
+    "..",      # keep clippy's default allowlist
+]
+
 # Disallow methods/paths prone to subtle bugs. Populated as we discover them.
 # disallowed-methods = []
 # disallowed-types = []

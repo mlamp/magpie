@@ -1,0 +1,21 @@
+[package]
+name = "magpie-bt-metainfo-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+magpie-bt-metainfo = { path = ".." }
+
+[[bin]]
+name = "metainfo"
+path = "fuzz_targets/metainfo.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

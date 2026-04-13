@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/magpie-bt-bencode",
+    "crates/magpie-bt-metainfo",
+    "crates/magpie-bt-wire",
+    "crates/magpie-bt-core",
+    "crates/magpie-bt",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/mlamp/magpie"
+homepage = "https://github.com/mlamp/magpie"
+authors = ["magpie contributors"]
+categories = ["network-programming"]
+keywords = ["bittorrent", "p2p", "torrent"]
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+# Pedantic rules that tend to fire on early-stage code; revisit post-M0.
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+
+[workspace.dependencies]
+thiserror = "2"
+tokio = { version = "1", default-features = false }
+tracing = "0.1"
+
+# Dev-dependencies shared across crates
+cucumber = "0.21"
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+proptest = "1"
+
+# Profile tuning: aggressive LTO in release for throughput benchmarks.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"

@@ -1,6 +1,6 @@
 # M0 — Foundations (no network)
 
-**Status**: planned
+**Status**: in-progress
 **Gate summary**: parse real v1/v2/hybrid .torrents; storage round-trips blocks; picker sane on synthetic bitfields; fuzz targets green for bencode + metainfo; coverage at DISCIPLINES bars.
 
 ## Goal
@@ -11,13 +11,14 @@ Stand up the non-network spine of magpie: workspace layout, on-disk data structu
 
 ### Workspace & crates
 
-- [ ] Cargo workspace at repo root with member crates:
-  - [ ] `magpie-bt-bencode` — zero-copy bencode encode/decode using `Cow<[u8]>`.
-  - [ ] `magpie-bt-metainfo` — .torrent parsing for v1, v2, hybrid; `InfoHash::{V1, V2, Hybrid}`; hash abstraction `PieceHash::{V1, V2}`.
-  - [ ] `magpie-bt-core` — initial home of `Storage` trait, piece picker, event bus.
-  - [ ] `magpie-bt` — facade crate (empty re-exports for now).
-- [ ] Every crate: `Cargo.toml` with SPDX `license = "Apache-2.0 OR MIT"` and matching `rust-version`.
-- [ ] Every crate root applies the lint block from DISCIPLINES.md (`forbid(unsafe_code)` with allowlist exceptions).
+- [x] Cargo workspace at repo root with member crates:
+  - [x] `magpie-bt-bencode` — placeholder; zero-copy bencode encode/decode lands next.
+  - [x] `magpie-bt-metainfo` — placeholder; .torrent parsing for v1, v2, hybrid lands next.
+  - [x] `magpie-bt-wire` — placeholder; peer wire protocol codec lands in M1.
+  - [x] `magpie-bt-core` — placeholder; `Storage` trait, picker, alert ring land next.
+  - [x] `magpie-bt` — facade crate with cucumber BDD harness scaffolded.
+- [x] Every crate: `Cargo.toml` with SPDX `license = "Apache-2.0 OR MIT"` and matching `rust-version`.
+- [x] Every crate root applies the lint block from DISCIPLINES.md (`forbid(unsafe_code)` everywhere except `magpie-bt-core` which uses `deny(unsafe_code)` per the allowlist).
 
 ### Functional deliverables
 
@@ -32,7 +33,9 @@ Stand up the non-network spine of magpie: workspace layout, on-disk data structu
 
 - [ ] **Property tests** (`proptest`) for `-bencode` round-trip, `-metainfo` parse/re-encode invariants, picker on synthetic bitfields.
 - [ ] **Fuzz targets** (`cargo-fuzz`): `bencode_decode`, `metainfo_parse`. Seed corpora committed; `fuzz/` directory wired into the `nightly.yml` workflow matrix.
-- [ ] **Benchmarks** (`criterion`): bencode decode throughput, storage write throughput, picker selection on varied bitfield shapes. Baselines committed.
+- [x] **Benchmarks** (`criterion`): skeleton targets in place (`bencode/benches/decode.rs`, `metainfo/benches/parse.rs`, `core/benches/{picker,alert_ring}.rs`). Real bench bodies + baselines land with implementation.
+- [x] **BDD** (`cucumber-rs`) harness scaffolded in `magpie-bt/tests/`; seed scenario in `features/bep-0003-core.feature` passes.
+- [x] **BEP coverage matrix** at [`docs/bep-coverage.md`](../bep-coverage.md) populated with planned BEPs.
 - [ ] **Coverage** thresholds met per DISCIPLINES.md (`-bencode`/`-metainfo` ≥90 %, `-core` ≥80 %, overall ≥85 %).
 - [ ] **Docs**: every `pub` item has a rustdoc summary; each crate root has an intro + runnable example; `cargo doc -D warnings` passes.
 - [ ] **CHANGELOG** under `## [Unreleased]` lists every public-API addition.

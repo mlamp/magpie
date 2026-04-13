@@ -1,0 +1,30 @@
+[package]
+name = "magpie-bt"
+description = "Facade crate for the magpie BitTorrent library (re-exports public API)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["bittorrent", "p2p", "torrent"]
+categories = ["network-programming"]
+readme = "README.md"
+
+[dependencies]
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.0.1" }
+magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.0.1" }
+magpie-bt-core = { path = "../magpie-bt-core", version = "0.0.1" }
+
+[dev-dependencies]
+cucumber.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[[test]]
+name = "cucumber"
+harness = false
+
+[lints]
+workspace = true

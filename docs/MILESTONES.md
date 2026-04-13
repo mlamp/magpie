@@ -17,7 +17,7 @@ A detail file is created when a milestone transitions `not-started → planned`,
 
 | ID | Name | Status | Detail |
 |----|------|--------|--------|
-| M0 | Foundations (no network) | planned | [001-foundations.md](milestones/001-foundations.md) |
+| M0 | Foundations (no network) | in-progress | [001-foundations.md](milestones/001-foundations.md) |
 | M1 | Leecher, TCP, v1 | not-started | — |
 | M2 | Seeder + multi-torrent + lightorrent dogfood | not-started | — |
 | M3 | Magnet + DHT | not-started | — |

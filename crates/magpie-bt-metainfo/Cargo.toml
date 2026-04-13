@@ -1,0 +1,28 @@
+[package]
+name = "magpie-bt-metainfo"
+description = ".torrent metainfo parser (v1, v2, hybrid) for the magpie BitTorrent library."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["bittorrent", "metainfo", "torrent"]
+categories = ["parser-implementations", "network-programming"]
+readme = "README.md"
+
+[dependencies]
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "parse"
+harness = false
+
+[lints]
+workspace = true
