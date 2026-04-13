@@ -1,0 +1,8 @@
+# Stable-only rustfmt options. Unstable options are deliberately omitted so
+# this config works on every toolchain in CI.
+edition = "2024"
+max_width = 100
+newline_style = "Unix"
+tab_spaces = 4
+use_field_init_shorthand = true
+use_try_shorthand = true

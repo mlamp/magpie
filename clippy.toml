@@ -1,0 +1,9 @@
+# Clippy configuration. MSRV is set here so lints that depend on toolchain
+# capability do not fire on features unavailable in the supported floor.
+# The concrete MSRV is confirmed at M0 kickoff and documented in
+# docs/DISCIPLINES.md.
+msrv = "1.94"
+
+# Disallow methods/paths prone to subtle bugs. Populated as we discover them.
+# disallowed-methods = []
+# disallowed-types = []

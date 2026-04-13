@@ -1,0 +1,16 @@
+/target/
+/_tmp/
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Coverage output (cargo-llvm-cov)
+/lcov.info
+/coverage/
+**/*.profraw
+
+# cargo-fuzz build + generated artefacts (corpus is committed)
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/coverage/

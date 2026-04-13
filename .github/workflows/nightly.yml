@@ -1,0 +1,55 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_fuzz: ${{ steps.check.outputs.has_fuzz }}
+      has_workspace: ${{ steps.check.outputs.has_workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -d fuzz ]; then echo "has_fuzz=true" >> "$GITHUB_OUTPUT"; else echo "has_fuzz=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f Cargo.toml ]; then echo "has_workspace=true" >> "$GITHUB_OUTPUT"; else echo "has_workspace=false" >> "$GITHUB_OUTPUT"; fi
+
+  fuzz:
+    name: cargo-fuzz (${{ matrix.target }})
+    needs: preflight
+    if: needs.preflight.outputs.has_fuzz == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Populate as fuzz targets are added. See docs/DISCIPLINES.md.
+        target: [bencode, metainfo]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Run fuzz target
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
+
+  miri:
+    name: miri
+    needs: preflight
+    if: needs.preflight.outputs.has_workspace == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+      - name: miri test
+        run: cargo miri test --workspace --lib
