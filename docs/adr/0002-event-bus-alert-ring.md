@@ -1,8 +1,7 @@
 # 0002 — Event bus: custom rasterbar-style alert ring
 
-- **Status**: proposed
-- **Date**: 2026-04-13 (revised)
-- **Deciders**: TBD (resolve during M0)
+- **Status**: accepted
+- **Date**: 2026-04-13 (revised + accepted)
 
 ## Context
 

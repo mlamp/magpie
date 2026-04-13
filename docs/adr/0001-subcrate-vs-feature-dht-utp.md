@@ -1,6 +1,6 @@
 # 0001 — Subcrate vs. feature for DHT and uTP
 
-- **Status**: proposed
+- **Status**: accepted
 - **Date**: 2026-04-13
 - **Deciders**: TBD (resolve before M3 kickoff)
 

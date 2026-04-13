@@ -1,6 +1,6 @@
 # 0003 — Tokio-only runtime
 
-- **Status**: proposed
+- **Status**: accepted
 - **Date**: 2026-04-13
 - **Deciders**: TBD (confirm at M0 kickoff)
 
