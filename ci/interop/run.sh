@@ -45,7 +45,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[interop:${SCENARIO}] stack up. Running per-client SHA-256 gate..."
+# Give services a few seconds to initialize before running the gate.
+sleep 3
+echo "[interop:${SCENARIO}] stack up. Dumping initial container logs..."
+docker compose -f "$COMPOSE_FILE" logs --no-color 2>&1 | tail -50
+echo "[interop:${SCENARIO}] Running per-client SHA-256 gate..."
 
 GATE="$(dirname "$0")/gate_${SCENARIO}.sh"
 if [ -x "$GATE" ]; then

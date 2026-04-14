@@ -74,10 +74,9 @@ services:
       - "6881"
 
   leech:
-    # Pin to 4.6.7 — last version where admin/adminadmin is the default
-    # password without requiring PBKDF2 pre-configuration. 5.0+ generates
-    # a random password on first boot and ignores ha1 configs.
-    image: linuxserver/qbittorrent:4.6.7
+    # Pin to 4.5.5 — uses admin/adminadmin by default without requiring
+    # pre-configuration. 4.6+ changed to random passwords on first boot.
+    image: linuxserver/qbittorrent:4.5.5
     depends_on:
       tracker:
         condition: service_started
