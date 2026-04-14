@@ -45,7 +45,7 @@ services:
       - --torrent
       - /shared/fixture.torrent
       - --data
-      - /shared/interop.bin
+      - /shared/fixture.bin
       - --listen
       - 0.0.0.0:6881
       - --stats-dir
