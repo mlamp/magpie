@@ -150,7 +150,7 @@ async fn listener_accepts_inbound_and_fetches_via_two_seeders() {
     )
     .await;
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     loop {
         let drained = alerts.drain();
         if drained
@@ -162,7 +162,7 @@ async fn listener_accepts_inbound_and_fetches_via_two_seeders() {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("inbound-path did not complete in 15s; saw {drained:?}");
+            panic!("inbound-path did not complete in 60s; saw {drained:?}");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }

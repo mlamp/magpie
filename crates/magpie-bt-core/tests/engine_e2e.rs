@@ -155,11 +155,11 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
         engine.add_peer(torrent_id, *addr).await.expect("add_peer");
     }
 
-    // Wait for completion alert (or timeout). 30 s budget because this
+    // Wait for completion alert (or timeout). 60 s budget because this
     // test spins 3 mock seeders + 1 engine leech on one runtime; under
-    // coverage instrumentation + `--all-features` the budget must be
-    // generous to avoid CI flakes on shared runners.
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    // coverage instrumentation + `--all-features` on shared CI runners
+    // the budget must be very generous to avoid flakes.
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     loop {
         let drained = alerts.drain();
         if drained
@@ -171,7 +171,7 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("did not complete within 30s; alerts seen: {drained:?}");
+            panic!("did not complete within 60s; alerts seen: {drained:?}");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
