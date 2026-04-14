@@ -30,11 +30,12 @@ login() {
     --data-urlencode "username=$USER" --data-urlencode "password=$PASS" \
     "$WEB_HOST/api/v2/auth/login"
 }
-for _ in $(seq 1 60); do
+# Cold boot on CI takes 30-60s; budget 90s.
+for _ in $(seq 1 90); do
   if login 2>/dev/null | grep -q Ok; then break; fi
   sleep 1
 done
-login | grep -q Ok || { echo "qBittorrent webUI login failed" >&2; exit 1; }
+login | grep -q Ok || { echo "qBittorrent webUI login failed after 90s" >&2; exit 1; }
 
 # Copy the torrent out of the shared volume (leech mounts it read-only
 # at /shared/fixture.torrent.with-announce) into /tmp for upload.

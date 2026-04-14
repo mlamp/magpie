@@ -24,19 +24,25 @@ need base64
 AUTH="-u $USER:$PASS"
 
 session_id() {
-  # 409 Conflict response carries X-Transmission-Session-Id.
-  curl -sS -D - $AUTH -o /dev/null "$RPC_HOST" \
-    | grep -i "X-Transmission-Session-Id" \
-    | awk '{print $2}' | tr -d '\r\n'
+  # 409 Conflict response carries X-Transmission-Session-Id header.
+  # Dump headers to a temp file to avoid pipefail issues with grep.
+  local hdr
+  hdr=$(mktemp)
+  curl -sS -D "$hdr" -o /dev/null $AUTH "$RPC_HOST" 2>/dev/null || true
+  local sid
+  sid=$(grep -i "X-Transmission-Session-Id" "$hdr" | awk '{print $2}' | tr -d '\r\n' || true)
+  rm -f "$hdr"
+  echo "$sid"
 }
 
-# Wait for Transmission RPC.
-for _ in $(seq 1 60); do
-  sid=$(session_id || true)
+# Wait for Transmission RPC — cold boot takes 30-60s on CI runners.
+sid=""
+for _ in $(seq 1 90); do
+  sid=$(session_id)
   [ -n "$sid" ] && break
   sleep 1
 done
-[ -n "$sid" ] || { echo "Transmission RPC not reachable" >&2; exit 1; }
+[ -n "$sid" ] || { echo "Transmission RPC not reachable after 90s" >&2; exit 1; }
 
 # Upload torrent as base64.
 docker compose -f "$COMPOSE_FILE" cp leech:/shared/fixture.torrent.with-announce /tmp/upload.torrent
