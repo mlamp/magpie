@@ -26,13 +26,12 @@ AUTH="-u $USER:$PASS"
 
 # Fetch session ID from a 409 response header.
 refresh_session_id() {
-  local hdr
-  hdr=$(mktemp)
   # Transmission returns 409 with the session ID header on any request
-  # without a valid session ID. curl exits 0 (no --fail).
-  curl -sS -D "$hdr" -o /dev/null $AUTH "$RPC_HOST" 2>/dev/null || true
-  sid=$(grep -i "X-Transmission-Session-Id" "$hdr" | awk '{print $2}' | tr -d '\r\n' || true)
-  rm -f "$hdr"
+  # without a valid session ID. Use -i to get headers+body in stdout,
+  # then extract the session ID with sed.
+  local resp
+  resp=$(curl -sS -i $AUTH "$RPC_HOST" 2>/dev/null || true)
+  sid=$(echo "$resp" | sed -n 's/^[Xx]-[Tt]ransmission-[Ss]ession-[Ii]d: *\([^ ]*\).*/\1/p' | tr -d '\r\n')
 }
 
 # RPC call with auto session-ID refresh on 409.
@@ -79,7 +78,26 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 [ -n "$sid" ] || { echo "Transmission RPC not reachable after 90s" >&2; exit 1; }
-echo "[tm] got session ID: ${sid:0:8}..."
+echo "[tm] got session ID: '${sid}' (len=${#sid})"
+
+# Verify session ID works with a simple session-get call.
+echo "[tm] verifying session ID with session-get..."
+verify_code=$(curl -sS -o /tmp/tm_verify.json -w '%{http_code}' \
+  $AUTH \
+  -H "X-Transmission-Session-Id: ${sid}" \
+  -H "Content-Type: application/json" \
+  -d '{"method":"session-get"}' \
+  "$RPC_HOST" 2>/dev/null) || true
+echo "[tm] session-get returned HTTP $verify_code"
+if [ "$verify_code" = "409" ]; then
+  echo "[tm] session-get body: $(head -c 200 /tmp/tm_verify.json 2>/dev/null)" >&2
+  # Try extracting fresh session ID from the 409 response
+  fresh_sid=$(curl -sS -i $AUTH "$RPC_HOST" 2>/dev/null | sed -n 's/^[Xx]-[Tt]ransmission-[Ss]ession-[Ii]d: *\([^ ]*\).*/\1/p' | tr -d '\r\n' || true)
+  echo "[tm] fresh session ID from 409: '${fresh_sid}' (len=${#fresh_sid})" >&2
+  if [ -n "$fresh_sid" ]; then
+    sid="$fresh_sid"
+  fi
+fi
 
 # Copy fixtures out of the shared volume.
 docker compose -f "$COMPOSE_FILE" cp leech:/shared/fixture.torrent.with-announce /tmp/upload.torrent
