@@ -233,6 +233,7 @@ async fn multi_torrent_soak() {
                 Duration::from_secs(600), // 100k pieces needs more headroom
             )));
         }
+        let total_pairs = handles.len() as u32;
         let mut failures = 0u32;
         for h in handles {
             match h.await {
@@ -246,7 +247,7 @@ async fn multi_torrent_soak() {
         // Tolerate occasional pair timeouts (resource pressure on shared
         // runners) but fail the soak if every pair in a cycle fails.
         assert!(
-            failures < handles.capacity() as u32,
+            failures < total_pairs,
             "all pairs failed in cycle {cycle} — likely a real bug, not transient pressure"
         );
         eprintln!(

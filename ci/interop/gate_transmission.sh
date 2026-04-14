@@ -50,7 +50,10 @@ tm_rpc() {
       -H "Content-Type: application/json" \
       -d "$body" \
       "$RPC_HOST" 2>/dev/null) || true
-    echo "[tm] RPC attempt $attempt: HTTP $http_code" >&2
+    echo "[tm] RPC attempt $attempt: HTTP $http_code (sid=${sid:0:8})" >&2
+    if [ "$http_code" = "409" ]; then
+      echo "[tm] 409 response body: $(cat /tmp/tm_rpc_out.json 2>/dev/null | head -c 200)" >&2
+    fi
     if [ "$http_code" = "409" ]; then
       echo "[tm] refreshing session ID" >&2
       refresh_session_id
