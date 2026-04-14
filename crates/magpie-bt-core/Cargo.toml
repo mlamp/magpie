@@ -23,9 +23,9 @@ prometheus = []
 dhat-heap = ["dep:dhat", "dep:libc", "magpie-bt-metainfo/test-support"]
 
 [dependencies]
-magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.0-alpha.2" }
-magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.0-alpha.2" }
-magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.1.0-alpha.2" }
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.0" }
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.0" }
+magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.1.0" }
 bytes.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true
@@ -44,7 +44,7 @@ criterion.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
 # Synthetic torrent generator for the controlled-swarm gate test.
-magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.0-alpha.2", features = ["test-support"] }
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.0", features = ["test-support"] }
 
 [[example]]
 name = "dhat_soak"
