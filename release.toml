@@ -1,7 +1,6 @@
 # cargo-release configuration.
 # Usage: cargo release 0.1.0 --execute
 
-[workspace]
 allow-branch = ["main"]
 sign-tag = false
 push = true
