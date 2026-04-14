@@ -64,7 +64,10 @@ pub struct DefaultPeerFilter {
 
 impl Default for DefaultPeerFilter {
     fn default() -> Self {
-        Self { allow_private: true, allow_loopback: false }
+        Self {
+            allow_private: true,
+            allow_loopback: false,
+        }
     }
 }
 
@@ -73,13 +76,19 @@ impl DefaultPeerFilter {
     /// tracker is untrusted and the host has no LAN seeding requirements.
     #[must_use]
     pub const fn strict() -> Self {
-        Self { allow_private: false, allow_loopback: false }
+        Self {
+            allow_private: false,
+            allow_loopback: false,
+        }
     }
 
     /// Permissive variant for tests — also allows loopback.
     #[must_use]
     pub const fn permissive_for_tests() -> Self {
-        Self { allow_private: true, allow_loopback: true }
+        Self {
+            allow_private: true,
+            allow_loopback: true,
+        }
     }
 }
 

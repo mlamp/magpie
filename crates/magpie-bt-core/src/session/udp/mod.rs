@@ -4,4 +4,4 @@
 
 pub mod demux;
 
-pub use demux::{DemuxError, TrackerResponse, UdpDemux, DEFAULT_TRACKER_TXN_TTL};
+pub use demux::{DEFAULT_TRACKER_TXN_TTL, DemuxError, TrackerResponse, UdpDemux};

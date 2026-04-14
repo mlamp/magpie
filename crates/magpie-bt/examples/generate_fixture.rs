@@ -13,8 +13,12 @@
 //! Required for the `--features test-support` build flag, which
 //! re-exports the semver-exempt synthetic generator.
 
-#![allow(clippy::cast_possible_truncation, clippy::missing_docs_in_private_items,
-    clippy::too_many_lines, unreachable_pub)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::missing_docs_in_private_items,
+    clippy::too_many_lines,
+    unreachable_pub
+)]
 
 use std::env;
 use std::io::Write as _;

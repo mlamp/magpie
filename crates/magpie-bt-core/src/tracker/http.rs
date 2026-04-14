@@ -72,13 +72,19 @@ impl HttpTracker {
     /// cannot be built (typically a TLS configuration error).
     pub fn new(base_url: impl Into<String>) -> Result<Self, TrackerError> {
         let client = build_default_client().map_err(TrackerError::Transport)?;
-        Ok(Self { client, base_url: base_url.into() })
+        Ok(Self {
+            client,
+            base_url: base_url.into(),
+        })
     }
 
     /// Construct with a caller-supplied [`reqwest::Client`].
     #[must_use]
     pub fn with_client(base_url: impl Into<String>, client: Client) -> Self {
-        Self { client, base_url: base_url.into() }
+        Self {
+            client,
+            base_url: base_url.into(),
+        }
     }
 }
 
@@ -100,10 +106,7 @@ impl Tracker for HttpTracker {
     }
 }
 
-async fn read_bounded_body(
-    response: reqwest::Response,
-    cap: u64,
-) -> Result<Vec<u8>, TrackerError> {
+async fn read_bounded_body(response: reqwest::Response, cap: u64) -> Result<Vec<u8>, TrackerError> {
     if let Some(len) = response.content_length()
         && len > cap
     {
@@ -205,7 +208,9 @@ fn parse_announce_response(bytes: &[u8]) -> Result<AnnounceResponse, TrackerErro
         .ok_or_else(|| TrackerError::MalformedResponse("response is not a dict".into()))?;
 
     if let Some(reason) = dict.get(&b"failure reason"[..]).and_then(Value::as_bytes) {
-        return Err(TrackerError::Failure(String::from_utf8_lossy(reason).into_owned()));
+        return Err(TrackerError::Failure(
+            String::from_utf8_lossy(reason).into_owned(),
+        ));
     }
 
     let interval_secs = dict
@@ -251,7 +256,11 @@ fn parse_announce_response(bytes: &[u8]) -> Result<AnnounceResponse, TrackerErro
         match p {
             Value::Bytes(b) => peers.extend(compact::decode_v4(b)?),
             Value::List(items) => peers.extend(parse_dict_peers(items)?),
-            _ => return Err(TrackerError::MalformedResponse("'peers' is not bytes or list".into())),
+            _ => {
+                return Err(TrackerError::MalformedResponse(
+                    "'peers' is not bytes or list".into(),
+                ));
+            }
         }
     }
     if let Some(Value::Bytes(b)) = dict.get(&b"peers6"[..]) {
@@ -273,9 +282,9 @@ fn parse_dict_peers(items: &[Value<'_>]) -> Result<Vec<std::net::SocketAddr>, Tr
     use std::net::{IpAddr, SocketAddr};
     let mut out = Vec::with_capacity(items.len());
     for item in items {
-        let d = item
-            .as_dict()
-            .ok_or_else(|| TrackerError::MalformedResponse("dict-peer entry is not a dict".into()))?;
+        let d = item.as_dict().ok_or_else(|| {
+            TrackerError::MalformedResponse("dict-peer entry is not a dict".into())
+        })?;
         let ip_bytes = d
             .get(&b"ip"[..])
             .and_then(Value::as_bytes)

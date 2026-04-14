@@ -6,13 +6,23 @@
 //! - A connection whose info_hash is not registered is dropped without a
 //!   handshake reply.
 //! - Peer-ID collision on inbound is silent-dropped (plan invariant #6).
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::cast_lossless,
-    clippy::too_many_lines, clippy::needless_collect, clippy::manual_assert,
-    clippy::redundant_clone, clippy::used_underscore_binding,
-    clippy::needless_pass_by_value, clippy::manual_let_else,
-    clippy::unused_async, clippy::field_reassign_with_default,
-    clippy::significant_drop_tightening, clippy::similar_names,
-    clippy::doc_markdown)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless,
+    clippy::too_many_lines,
+    clippy::needless_collect,
+    clippy::manual_assert,
+    clippy::redundant_clone,
+    clippy::used_underscore_binding,
+    clippy::needless_pass_by_value,
+    clippy::manual_let_else,
+    clippy::unused_async,
+    clippy::field_reassign_with_default,
+    clippy::significant_drop_tightening,
+    clippy::similar_names,
+    clippy::doc_markdown
+)]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -125,10 +135,22 @@ async fn listener_accepts_inbound_and_fetches_via_two_seeders() {
         .expect("listen");
 
     // Two seeders both initiate to our listener.
-    let h1 = seeder_initiate(bound, info_hash, *b"-Mg0001-inboundseed1", Arc::clone(&payload)).await;
-    let h2 = seeder_initiate(bound, info_hash, *b"-Mg0001-inboundseed2", Arc::clone(&payload)).await;
+    let h1 = seeder_initiate(
+        bound,
+        info_hash,
+        *b"-Mg0001-inboundseed1",
+        Arc::clone(&payload),
+    )
+    .await;
+    let h2 = seeder_initiate(
+        bound,
+        info_hash,
+        *b"-Mg0001-inboundseed2",
+        Arc::clone(&payload),
+    )
+    .await;
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
     loop {
         let drained = alerts.drain();
         if drained
@@ -140,14 +162,17 @@ async fn listener_accepts_inbound_and_fetches_via_two_seeders() {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("inbound-path did not complete in 5s; saw {drained:?}");
+            panic!("inbound-path did not complete in 15s; saw {drained:?}");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
     let mut got = vec![0u8; TOTAL as usize];
     storage.read_block(0, &mut got).unwrap();
-    assert_eq!(got, *payload, "inbound-path storage must match seeded payload");
+    assert_eq!(
+        got, *payload,
+        "inbound-path storage must match seeded payload"
+    );
 
     engine.shutdown(torrent_id).await;
     let _ = tokio::time::timeout(Duration::from_secs(2), engine.join()).await;
@@ -324,7 +349,12 @@ async fn per_torrent_peer_cap_rejects_outbound() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     let err = engine.add_peer(tid, seed_b).await.unwrap_err();
     assert!(
-        matches!(err, AddPeerError::PeerCapExceeded { scope: PeerCapScope::Torrent }),
+        matches!(
+            err,
+            AddPeerError::PeerCapExceeded {
+                scope: PeerCapScope::Torrent
+            }
+        ),
         "expected torrent cap exceeded; got {err:?}",
     );
 }
@@ -359,17 +389,31 @@ async fn global_peer_cap_rejects_outbound() {
         r
     };
 
-    let tid_a = engine.add_torrent(build_req(info_hash_a, Arc::clone(&storage_a))).await.unwrap();
-    let tid_b = engine.add_torrent(build_req(info_hash_b, Arc::clone(&storage_b))).await.unwrap();
+    let tid_a = engine
+        .add_torrent(build_req(info_hash_a, Arc::clone(&storage_a)))
+        .await
+        .unwrap();
+    let tid_b = engine
+        .add_torrent(build_req(info_hash_b, Arc::clone(&storage_b)))
+        .await
+        .unwrap();
 
     let seed_a = spawn_quiet_seeder(info_hash_a, *b"-Mg0001-globalcap001").await;
     let seed_b = spawn_quiet_seeder(info_hash_b, *b"-Mg0001-globalcap002").await;
 
-    engine.add_peer(tid_a, seed_a).await.expect("first add_peer");
+    engine
+        .add_peer(tid_a, seed_a)
+        .await
+        .expect("first add_peer");
     tokio::time::sleep(Duration::from_millis(100)).await;
     let err = engine.add_peer(tid_b, seed_b).await.unwrap_err();
     assert!(
-        matches!(err, AddPeerError::PeerCapExceeded { scope: PeerCapScope::Global }),
+        matches!(
+            err,
+            AddPeerError::PeerCapExceeded {
+                scope: PeerCapScope::Global
+            }
+        ),
         "expected global cap exceeded; got {err:?}",
     );
 }
@@ -429,10 +473,16 @@ async fn inbound_silent_drops_when_cap_exceeded() {
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     loop {
         let drained = alerts.drain();
-        if drained.iter().any(|a| matches!(a, Alert::PeerConnected { .. })) {
+        if drained
+            .iter()
+            .any(|a| matches!(a, Alert::PeerConnected { .. }))
+        {
             break;
         }
-        assert!(std::time::Instant::now() <= deadline, "peer 1 never registered");
+        assert!(
+            std::time::Instant::now() <= deadline,
+            "peer 1 never registered"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 

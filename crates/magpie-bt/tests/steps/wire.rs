@@ -3,14 +3,17 @@
 //! `&mut MagpieWorld` is the cucumber-imposed signature; clippy's
 //! `needless_pass_by_ref_mut` and `needless_pass_by_value` would have us drop
 //! the borrow / take by reference, neither of which the framework supports.
-#![allow(clippy::needless_pass_by_ref_mut, clippy::needless_pass_by_value,
-    clippy::too_many_lines, clippy::redundant_clone, clippy::used_underscore_binding)]
+#![allow(
+    clippy::needless_pass_by_ref_mut,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::redundant_clone,
+    clippy::used_underscore_binding
+)]
 
 use bytes::{Bytes, BytesMut};
 use cucumber::{given, then, when};
-use magpie_bt_wire::{
-    Block, BlockRequest, Handshake, Message, WireCodec, id,
-};
+use magpie_bt_wire::{Block, BlockRequest, Handshake, Message, WireCodec, id};
 use tokio_util::codec::{Decoder, Encoder};
 
 use crate::MagpieWorld;
@@ -24,7 +27,9 @@ fn parse_hex(bytes: &str) -> Vec<u8> {
 
 // ---- BEP 3: handshake ----
 
-#[given(regex = r#"^a handshake with info-hash "(.+)" repeated 20 times and peer-id "(.+)" repeated 20 times$"#)]
+#[given(
+    regex = r#"^a handshake with info-hash "(.+)" repeated 20 times and peer-id "(.+)" repeated 20 times$"#
+)]
 fn handshake_repeating(world: &mut MagpieWorld, hash_byte: String, peer_byte: String) {
     let hi = u8::from_str_radix(&hash_byte, 16).expect("hex hash byte");
     let pi = u8::from_str_radix(&peer_byte, 16).expect("hex peer byte");
@@ -92,7 +97,9 @@ fn given_allowed_fast(world: &mut MagpieWorld, piece: u32) {
 
 #[given(regex = r"^a RejectRequest for piece (\d+), offset (\d+), length (\d+)$")]
 fn given_reject(world: &mut MagpieWorld, piece: u32, offset: u32, length: u32) {
-    world.pending_message = Some(Message::RejectRequest(BlockRequest::new(piece, offset, length)));
+    world.pending_message = Some(Message::RejectRequest(BlockRequest::new(
+        piece, offset, length,
+    )));
 }
 
 #[when("the wire codec encodes and decodes it")]
@@ -101,7 +108,10 @@ fn codec_roundtrip(world: &mut MagpieWorld) {
     let mut codec = WireCodec::default();
     let mut buf = BytesMut::new();
     codec.encode(msg.clone(), &mut buf).expect("encode");
-    let decoded = codec.decode(&mut buf).expect("decode").expect("complete frame");
+    let decoded = codec
+        .decode(&mut buf)
+        .expect("decode")
+        .expect("complete frame");
     assert!(buf.is_empty(), "frame should be fully consumed");
     world.decoded_message = Some(decoded);
 }

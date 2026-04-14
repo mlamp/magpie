@@ -25,8 +25,8 @@
 #![allow(clippy::significant_drop_tightening)]
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::engine::TorrentId;
 use crate::session::messages::PeerSlot;

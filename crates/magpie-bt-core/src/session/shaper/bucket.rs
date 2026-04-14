@@ -93,7 +93,10 @@ impl TokenBucket {
             if want == cur {
                 return;
             }
-            match self.tokens.compare_exchange_weak(cur, want, Ordering::Release, Ordering::Relaxed) {
+            match self
+                .tokens
+                .compare_exchange_weak(cur, want, Ordering::Release, Ordering::Relaxed)
+            {
                 Ok(_) => return,
                 Err(actual) => cur = actual,
             }
@@ -178,7 +181,11 @@ mod tests {
     fn try_consume_fails_over_budget_and_rolls_back() {
         let b = TokenBucket::new(1000, 500);
         assert!(!b.try_consume(600));
-        assert_eq!(b.tokens(), 500, "failed consume must not leave bucket partially drained");
+        assert_eq!(
+            b.tokens(),
+            500,
+            "failed consume must not leave bucket partially drained"
+        );
         let (_c, d) = b.take_demand();
         assert_eq!(d, 600, "denied demand must reflect the requested amount");
     }

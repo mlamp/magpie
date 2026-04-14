@@ -47,9 +47,7 @@ use magpie_bt::engine::AttachTrackerConfig;
 use magpie_bt::peer_filter::DefaultPeerFilter;
 use magpie_bt::session::TorrentParams;
 use magpie_bt::tracker::{HttpTracker, Tracker};
-use magpie_bt::{
-    AddTorrentRequest, Engine, FileStorage, InfoHash, MetaInfo, PeerIdBuilder, parse,
-};
+use magpie_bt::{AddTorrentRequest, Engine, FileStorage, InfoHash, MetaInfo, PeerIdBuilder, parse};
 use magpie_bt_metainfo::FileListV1;
 
 #[derive(Debug, Default)]
@@ -60,7 +58,10 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { listen_port: 6881, ..Default::default() };
+    let mut a = Args {
+        listen_port: 6881,
+        ..Default::default()
+    };
     let mut iter = env::args().skip(1);
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -91,8 +92,9 @@ fn usage() -> String {
 async fn main() -> ExitCode {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("magpie_bt_core=info,leech=info")),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("magpie_bt_core=info,leech=info")
+            }),
         )
         .with_target(true)
         .try_init();
@@ -178,9 +180,8 @@ async fn run(args: Args) -> Result<(), String> {
     // Tracker.
     let announce = pick_announce(&meta).ok_or("no HTTP/HTTPS tracker URL in .torrent")?;
     println!("tracker: {announce}");
-    let tracker: Arc<dyn Tracker> = Arc::new(
-        HttpTracker::new(announce.clone()).map_err(|e| format!("HttpTracker::new: {e}"))?,
-    );
+    let tracker: Arc<dyn Tracker> =
+        Arc::new(HttpTracker::new(announce.clone()).map_err(|e| format!("HttpTracker::new: {e}"))?);
     let cfg = AttachTrackerConfig {
         listen_port: args.listen_port,
         ..Default::default()

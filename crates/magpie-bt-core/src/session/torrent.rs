@@ -196,11 +196,7 @@ struct PeerState {
 }
 
 impl PeerState {
-    fn new(
-        tx: mpsc::UnboundedSender<SessionToPeer>,
-        piece_count: u32,
-        max_in_flight: u32,
-    ) -> Self {
+    fn new(tx: mpsc::UnboundedSender<SessionToPeer>, piece_count: u32, max_in_flight: u32) -> Self {
         Self {
             tx,
             have: vec![false; piece_count as usize],
@@ -347,8 +343,10 @@ impl TorrentSession {
             SessionToPeer::SendBitfield(pack_bitfield(&self.picker, total))
         };
         let _ = tx.send(advert);
-        self.peers
-            .insert(slot, PeerState::new(tx, self.params.piece_count, max_in_flight));
+        self.peers.insert(
+            slot,
+            PeerState::new(tx, self.params.piece_count, max_in_flight),
+        );
         true
     }
 
@@ -446,7 +444,9 @@ impl TorrentSession {
             Ok(()) => {
                 tracing::debug!(piece = completion.piece, "piece verified and committed");
                 self.picker.mark_have(completion.piece);
-                self.alerts.push(Alert::PieceCompleted { piece: completion.piece });
+                self.alerts.push(Alert::PieceCompleted {
+                    piece: completion.piece,
+                });
                 for p in self.peers.values() {
                     let _ = p.tx.send(SessionToPeer::Have(completion.piece));
                 }
@@ -456,20 +456,31 @@ impl TorrentSession {
                 }
             }
             Err(DiskError::HashMismatch) => {
-                tracing::warn!(piece = completion.piece, "piece hash mismatch — re-requesting");
-                self.alerts.push(Alert::Error { code: AlertErrorCode::HashMismatch });
+                tracing::warn!(
+                    piece = completion.piece,
+                    "piece hash mismatch — re-requesting"
+                );
+                self.alerts.push(Alert::Error {
+                    code: AlertErrorCode::HashMismatch,
+                });
                 // Piece marker is gone and picker still sees it as missing,
                 // so next schedule pass will re-claim it from scratch.
             }
             Err(DiskError::Io) => {
-                self.alerts.push(Alert::Error { code: AlertErrorCode::StorageIo });
+                self.alerts.push(Alert::Error {
+                    code: AlertErrorCode::StorageIo,
+                });
             }
         }
     }
 
     async fn handle(&mut self, msg: PeerToSession) {
         match msg {
-            PeerToSession::Connected { slot, supports_fast, .. } => {
+            PeerToSession::Connected {
+                slot,
+                supports_fast,
+                ..
+            } => {
                 tracing::debug!(slot = slot.0, supports_fast, "peer connected");
                 if let Some(p) = self.peers.get_mut(&slot) {
                     p.supports_fast = supports_fast;
@@ -511,7 +522,8 @@ impl TorrentSession {
                     && !p.have[piece as usize]
                 {
                     p.have[piece as usize] = true;
-                    self.picker.observe_peer_bitfield(&single_bit(piece, p.have.len()));
+                    self.picker
+                        .observe_peer_bitfield(&single_bit(piece, p.have.len()));
                 }
                 self.maybe_express_interest(slot);
             }
@@ -550,7 +562,12 @@ impl TorrentSession {
             PeerToSession::Rejected { slot, req } => {
                 self.release_block_claim(slot, req);
             }
-            PeerToSession::BlockReceived { slot, piece, offset, data } => {
+            PeerToSession::BlockReceived {
+                slot,
+                piece,
+                offset,
+                data,
+            } => {
                 self.handle_block(slot, piece, offset, &data).await;
             }
             PeerToSession::Interested { slot } => {
@@ -563,8 +580,12 @@ impl TorrentSession {
                 self.handle_block_request(slot, req);
             }
             PeerToSession::RequestCancelled { slot, req } => {
-                tracing::debug!(slot = slot.0, piece = req.piece, offset = req.offset,
-                    "peer cancelled request (tracked pre-PeerUploadQueue wiring)");
+                tracing::debug!(
+                    slot = slot.0,
+                    piece = req.piece,
+                    offset = req.offset,
+                    "peer cancelled request (tracked pre-PeerUploadQueue wiring)"
+                );
             }
         }
     }
@@ -638,8 +659,8 @@ impl TorrentSession {
             for (piece, in_prog) in &self.in_progress {
                 let piece_size = if *piece + 1 == piece_count {
                     // Last piece may be short.
-                    let tail = self.params.total_length
-                        - u64::from(*piece) * self.params.piece_length;
+                    let tail =
+                        self.params.total_length - u64::from(*piece) * self.params.piece_length;
                     u32::try_from(tail).unwrap_or(u32::MAX)
                 } else {
                     piece_length_u32
@@ -674,7 +695,9 @@ impl TorrentSession {
     /// follow-up step.
     fn handle_peer_interest(&mut self, slot: PeerSlot, interested: bool) {
         let paused = self.paused;
-        let Some(peer) = self.peers.get_mut(&slot) else { return };
+        let Some(peer) = self.peers.get_mut(&slot) else {
+            return;
+        };
         peer.peer_interested = interested;
         // G1: while paused, do not auto-unchoke — peer stays choked until
         // resume runs the broadcast loop.
@@ -695,7 +718,9 @@ impl TorrentSession {
             self.kick_peer(slot, AlertErrorCode::PeerProtocol);
             return;
         }
-        let Some(peer) = self.peers.get(&slot) else { return };
+        let Some(peer) = self.peers.get(&slot) else {
+            return;
+        };
         // Choked peers do not get served (M2 pre-PeerUploadQueue baseline).
         if peer.we_choking {
             if peer.supports_fast {
@@ -732,7 +757,8 @@ impl TorrentSession {
                 .await;
             match result {
                 Ok(piece_bytes) => {
-                    let block = piece_bytes.slice(req.offset as usize..(req.offset + req.length) as usize);
+                    let block =
+                        piece_bytes.slice(req.offset as usize..(req.offset + req.length) as usize);
                     let _ = tx.send(SessionToPeer::BlockReady { req, data: block });
                 }
                 Err(_) => {
@@ -755,10 +781,13 @@ impl TorrentSession {
     }
 
     fn maybe_express_interest(&mut self, slot: PeerSlot) {
-        let Some(p) = self.peers.get_mut(&slot) else { return };
-        let want = p.have.iter().enumerate().any(|(i, has)| {
-            *has && !self.picker.has_piece(u32::try_from(i).unwrap_or(u32::MAX))
-        });
+        let Some(p) = self.peers.get_mut(&slot) else {
+            return;
+        };
+        let want =
+            p.have.iter().enumerate().any(|(i, has)| {
+                *has && !self.picker.has_piece(u32::try_from(i).unwrap_or(u32::MAX))
+            });
         if want != p.we_are_interested {
             p.we_are_interested = want;
             let _ = p.tx.send(SessionToPeer::SetInterested(want));
@@ -807,10 +836,7 @@ impl TorrentSession {
             }
             // Has at least one unclaimed unreceived block?
             let in_progress = self.in_progress.get(&piece);
-            let block_count = self
-                .params
-                .piece_size(piece)
-                .div_ceil(BLOCK_SIZE);
+            let block_count = self.params.piece_size(piece).div_ceil(BLOCK_SIZE);
             let mut found = false;
             for idx in 0..block_count {
                 let claimed = in_progress
@@ -957,7 +983,9 @@ impl TorrentSession {
         if self.disk_tx.send(op).await.is_err() {
             // DiskWriter has gone away — drop the marker and surface I/O error.
             self.in_progress.remove(&piece);
-            self.alerts.push(Alert::Error { code: AlertErrorCode::StorageIo });
+            self.alerts.push(Alert::Error {
+                code: AlertErrorCode::StorageIo,
+            });
         }
     }
 }
@@ -1066,7 +1094,13 @@ mod tests {
         let mut p = ok_params();
         p.piece_hashes = vec![0u8; 4 * 20 - 1];
         let err = p.validate().unwrap_err();
-        assert!(matches!(err, TorrentParamsError::PieceHashesLength { expected: 80, actual: 79 }));
+        assert!(matches!(
+            err,
+            TorrentParamsError::PieceHashesLength {
+                expected: 80,
+                actual: 79
+            }
+        ));
     }
 
     #[test]
@@ -1074,7 +1108,10 @@ mod tests {
         let mut p = ok_params();
         p.total_length += 1;
         let err = p.validate().unwrap_err();
-        assert!(matches!(err, TorrentParamsError::TotalLengthOverflow { .. }));
+        assert!(matches!(
+            err,
+            TorrentParamsError::TotalLengthOverflow { .. }
+        ));
     }
 
     #[test]
@@ -1188,7 +1225,11 @@ mod tests {
         assert!(session.register_peer(PeerSlot(2), tx_b));
         drain_initial_advert(&mut rx_a);
         drain_initial_advert(&mut rx_b);
-        session.peers.get_mut(&PeerSlot(1)).unwrap().we_are_interested = true;
+        session
+            .peers
+            .get_mut(&PeerSlot(1))
+            .unwrap()
+            .we_are_interested = true;
 
         session.maybe_fire_completion_transition();
 
@@ -1221,7 +1262,11 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         assert!(session.register_peer(PeerSlot(1), tx));
         drain_initial_advert(&mut rx);
-        session.peers.get_mut(&PeerSlot(1)).unwrap().we_are_interested = true;
+        session
+            .peers
+            .get_mut(&PeerSlot(1))
+            .unwrap()
+            .we_are_interested = true;
 
         session.maybe_fire_completion_transition();
         let first = alerts.drain();
@@ -1262,7 +1307,11 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         assert!(session.register_peer(PeerSlot(1), tx));
         drain_initial_advert(&mut rx);
-        session.peers.get_mut(&PeerSlot(1)).unwrap().we_are_interested = true;
+        session
+            .peers
+            .get_mut(&PeerSlot(1))
+            .unwrap()
+            .we_are_interested = true;
 
         // Load in fully-complete — emulates resume-from-disk where every
         // piece is already verified.
@@ -1336,7 +1385,10 @@ mod tests {
         // A receives Unchoke (was interested and choked); B receives nothing.
         assert!(matches!(rx_a.try_recv(), Ok(SessionToPeer::Unchoke)));
         assert!(rx_a.try_recv().is_err());
-        assert!(rx_b.try_recv().is_err(), "B not interested, must stay choked");
+        assert!(
+            rx_b.try_recv().is_err(),
+            "B not interested, must stay choked"
+        );
         assert!(!session.peers.get(&PeerSlot(1)).unwrap().we_choking);
         assert!(session.peers.get(&PeerSlot(2)).unwrap().we_choking);
     }
@@ -1436,7 +1488,10 @@ mod tests {
                 saw_cancel = true;
             }
         }
-        assert!(saw_cancel, "pause must broadcast Cancel for the claimed block");
+        assert!(
+            saw_cancel,
+            "pause must broadcast Cancel for the claimed block"
+        );
         // Claim must be released so a future resume can re-request.
         let in_prog = session.in_progress.get(&0).expect("piece still tracked");
         assert!(
@@ -1477,7 +1532,11 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         assert!(session.register_peer(PeerSlot(1), tx));
         drain_initial_advert(&mut rx);
-        session.peers.get_mut(&PeerSlot(1)).unwrap().we_are_interested = true;
+        session
+            .peers
+            .get_mut(&PeerSlot(1))
+            .unwrap()
+            .we_are_interested = true;
 
         session.maybe_fire_completion_transition();
 

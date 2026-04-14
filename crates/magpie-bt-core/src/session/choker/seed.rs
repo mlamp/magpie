@@ -21,7 +21,9 @@ impl SeedChoker {
     /// Construct with default [`ChokerConfig`].
     #[must_use]
     pub fn new() -> Self {
-        Self { cfg: ChokerConfig::default() }
+        Self {
+            cfg: ChokerConfig::default(),
+        }
     }
 
     /// Construct with a custom config.
@@ -55,7 +57,10 @@ impl Unchoker for SeedChoker {
             self.cfg.new_peer_weight,
             rotation_counter,
         );
-        UnchokeSet { regular, optimistic }
+        UnchokeSet {
+            regular,
+            optimistic,
+        }
     }
 
     fn config(&self) -> &ChokerConfig {

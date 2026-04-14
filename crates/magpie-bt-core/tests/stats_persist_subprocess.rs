@@ -13,23 +13,30 @@
 //! vacuously match a zero-restore), and asserts the restored value is
 //! `>=` the pre-kill snapshot AND `> 0` after restart.
 #![cfg(unix)]
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::too_many_lines,
-    clippy::collapsible_if, clippy::items_after_statements, clippy::doc_markdown,
-    clippy::single_match_else, clippy::option_if_let_else,
-    clippy::manual_let_else)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::collapsible_if,
+    clippy::items_after_statements,
+    clippy::doc_markdown,
+    clippy::single_match_else,
+    clippy::option_if_let_else,
+    clippy::manual_let_else
+)]
 
 use std::io::{BufRead, BufReader, Write as _};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::Arc;
+use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
 use magpie_bt_core::alerts::{AlertCategory, AlertQueue};
 use magpie_bt_core::engine::{AddTorrentRequest, Engine};
 use magpie_bt_core::peer_filter::DefaultPeerFilter;
-use magpie_bt_core::session::stats::sink::FileStatsSink;
 use magpie_bt_core::session::TorrentParams;
+use magpie_bt_core::session::stats::sink::FileStatsSink;
 use magpie_bt_core::storage::{MemoryStorage, Storage};
 use magpie_bt_metainfo::test_support::synthetic_torrent_v1;
 use tempfile::tempdir;
@@ -79,12 +86,17 @@ fn spawn_seeder(
     flush_secs: u64,
 ) -> SpawnedSeeder {
     let mut child = Command::new(seeder_exe())
-        .arg("--torrent").arg(torrent)
-        .arg("--data").arg(data)
-        .arg("--listen").arg("127.0.0.1:0")
-        .arg("--stats-dir").arg(stats_dir)
+        .arg("--torrent")
+        .arg(torrent)
+        .arg("--data")
+        .arg(data)
+        .arg("--listen")
+        .arg("127.0.0.1:0")
+        .arg("--stats-dir")
+        .arg(stats_dir)
         .arg("--allow-loopback")
-        .arg("--flush-secs").arg(flush_secs.to_string())
+        .arg("--flush-secs")
+        .arg(flush_secs.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -173,8 +185,14 @@ async fn seeder_upload_counters_survive_sigkill() {
         *b"-Mg0001-spkleech01ab",
     );
     leech_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
-    let leech_tid = leech_engine.add_torrent(leech_req).await.expect("leech add");
-    leech_engine.add_peer(leech_tid, seed_addr).await.expect("connect");
+    let leech_tid = leech_engine
+        .add_torrent(leech_req)
+        .await
+        .expect("leech add");
+    leech_engine
+        .add_peer(leech_tid, seed_addr)
+        .await
+        .expect("connect");
 
     // Wait for leech to complete and for the sink to flush at least one
     // sidecar with non-zero uploaded counters.
@@ -221,12 +239,17 @@ async fn seeder_upload_counters_survive_sigkill() {
     // The seeder's "stats: restored from ... uploaded N down M" startup
     // log line is our signal.
     let mut child2 = Command::new(seeder_exe())
-        .arg("--torrent").arg(&torrent_path)
-        .arg("--data").arg(&data_path)
-        .arg("--listen").arg("127.0.0.1:0")
-        .arg("--stats-dir").arg(&stats_path)
+        .arg("--torrent")
+        .arg(&torrent_path)
+        .arg("--data")
+        .arg(&data_path)
+        .arg("--listen")
+        .arg("127.0.0.1:0")
+        .arg("--stats-dir")
+        .arg(&stats_path)
         .arg("--allow-loopback")
-        .arg("--flush-secs").arg("1")
+        .arg("--flush-secs")
+        .arg("1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -242,8 +265,14 @@ async fn seeder_upload_counters_survive_sigkill() {
             if let Some(idx) = line.find("stats: restored from ") {
                 // Expected shape: "stats: restored from <path> — uploaded N down M"
                 let rest = &line[idx..];
-                let up = rest.split("uploaded ").nth(1).and_then(|s| s.split_whitespace().next());
-                let dn = rest.split("down ").nth(1).and_then(|s| s.split_whitespace().next());
+                let up = rest
+                    .split("uploaded ")
+                    .nth(1)
+                    .and_then(|s| s.split_whitespace().next());
+                let dn = rest
+                    .split("down ")
+                    .nth(1)
+                    .and_then(|s| s.split_whitespace().next());
                 if let (Some(u), Some(d)) = (up, dn) {
                     if let (Ok(u), Ok(d)) = (u.parse::<u64>(), d.parse::<u64>()) {
                         let _ = restore_tx.send((u, d));
@@ -259,14 +288,13 @@ async fn seeder_upload_counters_survive_sigkill() {
         }
     });
 
-    let (restored_up, restored_down) =
-        match restore_rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(v) => v,
-            Err(_) => {
-                let _ = child2.kill();
-                panic!("seeder2 did not print 'stats: restored' within 5s");
-            }
-        };
+    let (restored_up, restored_down) = match restore_rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(v) => v,
+        Err(_) => {
+            let _ = child2.kill();
+            panic!("seeder2 did not print 'stats: restored' within 5s");
+        }
+    };
     eprintln!("restored: uploaded={restored_up} downloaded={restored_down}");
 
     assert!(

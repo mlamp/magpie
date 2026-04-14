@@ -16,15 +16,21 @@
 //!
 //! Unix-only (libc::getrusage for RSS sampling).
 #![cfg(unix)]
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::unreadable_literal,
-    clippy::doc_markdown, clippy::manual_assert, clippy::borrow_as_ptr)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::unreadable_literal,
+    clippy::doc_markdown,
+    clippy::manual_assert,
+    clippy::borrow_as_ptr
+)]
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{Duration, Instant};
 
 use magpie_bt_core::alerts::{Alert, AlertCategory, AlertQueue};
@@ -100,7 +106,9 @@ async fn run_pair(
     seed_alerts.set_mask(AlertCategory(u32::MAX));
     let seed_engine = Arc::new(Engine::new(Arc::clone(&seed_alerts)));
     let seed_storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new(total));
-    seed_storage.write_block(0, &synth.content).expect("seed write");
+    seed_storage
+        .write_block(0, &synth.content)
+        .expect("seed write");
     let mut seed_req = AddTorrentRequest::new(
         info_hash,
         build_params(piece_count, piece_length, pieces.clone()),
@@ -141,7 +149,10 @@ async fn run_pair(
         },
     );
     leech_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
-    let leech_tid = leech_engine.add_torrent(leech_req).await.expect("leech add");
+    let leech_tid = leech_engine
+        .add_torrent(leech_req)
+        .await
+        .expect("leech add");
     leech_engine
         .add_peer(leech_tid, seed_addr)
         .await
@@ -152,9 +163,7 @@ async fn run_pair(
     let mut completed = 0_usize;
     while completed < piece_count as usize {
         if Instant::now() > deadline {
-            panic!(
-                "soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces"
-            );
+            panic!("soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces");
         }
         let drained = leech_alerts.drain();
         completed += drained
@@ -265,7 +274,9 @@ async fn main() {
     rss_handle.abort();
 
     let observed_peak = peak_rss.load(Ordering::Relaxed);
-    eprintln!("[dhat-soak] finished after {cycle} cycle(s) in {duration_secs}s; peak RSS {observed_peak} KiB");
+    eprintln!(
+        "[dhat-soak] finished after {cycle} cycle(s) in {duration_secs}s; peak RSS {observed_peak} KiB"
+    );
 
     // Write peak-rss.json.
     let rss_json = format!(

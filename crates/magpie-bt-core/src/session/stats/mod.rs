@@ -104,10 +104,7 @@ impl PerTorrentStats {
     /// the disconnected-sum. Caller holds the torrent-actor lock that
     /// defines "live" so the read is consistent.
     #[must_use]
-    pub fn snapshot<'a>(
-        &self,
-        live_peers: impl IntoIterator<Item = &'a PeerStats>,
-    ) -> (u64, u64) {
+    pub fn snapshot<'a>(&self, live_peers: impl IntoIterator<Item = &'a PeerStats>) -> (u64, u64) {
         let mut up = self.disconnected_up.load(Ordering::Acquire);
         let mut down = self.disconnected_down.load(Ordering::Acquire);
         for p in live_peers {

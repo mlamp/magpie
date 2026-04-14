@@ -61,14 +61,26 @@
 //! `.stats`; `FileStatsSink::load_sidecar` on restart still sees the
 //! prior committed snapshot (atomic write-tmp+rename).
 
-#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation,
-    clippy::cast_lossless, clippy::cast_sign_loss, clippy::too_many_lines,
-    clippy::uninlined_format_args, clippy::unchecked_time_subtraction,
-    clippy::significant_drop_tightening, clippy::redundant_closure_for_method_calls,
-    clippy::map_unwrap_or, clippy::similar_names, clippy::doc_markdown,
-    clippy::format_push_string, clippy::items_after_statements,
-    clippy::collapsible_if, clippy::doc_lazy_continuation,
-    unused_qualifications, unreachable_pub)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines,
+    clippy::uninlined_format_args,
+    clippy::unchecked_time_subtraction,
+    clippy::significant_drop_tightening,
+    clippy::redundant_closure_for_method_calls,
+    clippy::map_unwrap_or,
+    clippy::similar_names,
+    clippy::doc_markdown,
+    clippy::format_push_string,
+    clippy::items_after_statements,
+    clippy::collapsible_if,
+    clippy::doc_lazy_continuation,
+    unused_qualifications,
+    unreachable_pub
+)]
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -139,7 +151,9 @@ mod run {
                 "--torrent" => torrent = iter.next().map(PathBuf::from),
                 "--data" => data = iter.next().map(PathBuf::from),
                 "--listen" => {
-                    listen = iter.next().ok_or_else(|| "--listen needs a value".to_string())?;
+                    listen = iter
+                        .next()
+                        .ok_or_else(|| "--listen needs a value".to_string())?;
                 }
                 "--stats-dir" => stats_dir = iter.next().map(PathBuf::from),
                 "--announce" => announce = true,
@@ -215,8 +229,8 @@ mod run {
 
     async fn drive(args: Args) -> Result<(), String> {
         // --- metainfo ---------------------------------------------------
-        let torrent_bytes = std::fs::read(&args.torrent)
-            .map_err(|e| format!("read .torrent: {e}"))?;
+        let torrent_bytes =
+            std::fs::read(&args.torrent).map_err(|e| format!("read .torrent: {e}"))?;
         let meta = parse(&torrent_bytes).map_err(|e| format!("parse .torrent: {e}"))?;
         let info_hash = match meta.info_hash {
             InfoHash::V1(h) | InfoHash::Hybrid { v1: h, .. } => h,
@@ -234,12 +248,11 @@ mod run {
             }
         };
         let piece_length = meta.info.piece_length;
-        let piece_count = u32::try_from(v1.pieces.len() / 20)
-            .map_err(|_| "piece count overflow")?;
+        let piece_count =
+            u32::try_from(v1.pieces.len() / 20).map_err(|_| "piece count overflow")?;
 
         // --- sanity: data file length matches ---------------------------
-        let data_meta = std::fs::metadata(&args.data)
-            .map_err(|e| format!("stat --data: {e}"))?;
+        let data_meta = std::fs::metadata(&args.data).map_err(|e| format!("stat --data: {e}"))?;
         if data_meta.len() != total_length {
             return Err(format!(
                 "--data length {} does not match torrent total {} — refusing to serve",
@@ -265,9 +278,8 @@ mod run {
         );
 
         // --- storage + (optional) verify --------------------------------
-        let storage = Arc::new(
-            FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?,
-        );
+        let storage =
+            Arc::new(FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?);
         if args.verify {
             use magpie_bt_metainfo::sha1;
             eprintln!("verifying {piece_count} pieces...");
@@ -329,7 +341,9 @@ mod run {
         };
         let bound = engine
             .listen(
-                args.listen.parse().map_err(|e| format!("parse --listen: {e}"))?,
+                args.listen
+                    .parse()
+                    .map_err(|e| format!("parse --listen: {e}"))?,
                 listen_cfg,
             )
             .await
@@ -341,9 +355,8 @@ mod run {
             if let Some(ann_bytes) = meta.announce {
                 let ann = std::str::from_utf8(ann_bytes)
                     .map_err(|e| format!("announce URL not UTF-8: {e}"))?;
-                let http_tracker = Arc::new(
-                    HttpTracker::new(ann).map_err(|e| format!("HttpTracker: {e}"))?,
-                );
+                let http_tracker =
+                    Arc::new(HttpTracker::new(ann).map_err(|e| format!("HttpTracker: {e}"))?);
                 engine
                     .attach_tracker(torrent_id, http_tracker, AttachTrackerConfig::default())
                     .await
@@ -360,9 +373,8 @@ mod run {
             p.set_extension("stats.d");
             p
         });
-        let sink = Arc::new(
-            FileStatsSink::new(&stats_dir).map_err(|e| format!("FileStatsSink: {e}"))?,
-        );
+        let sink =
+            Arc::new(FileStatsSink::new(&stats_dir).map_err(|e| format!("FileStatsSink: {e}"))?);
         if let Some(prior) = sink
             .load_sidecar(&info_hash)
             .map_err(|e| format!("load_sidecar: {e}"))?
@@ -374,7 +386,10 @@ mod run {
                 prior.downloaded
             );
         } else {
-            eprintln!("stats: no prior sidecar at {} (cold start)", stats_dir.display());
+            eprintln!(
+                "stats: no prior sidecar at {} (cold start)",
+                stats_dir.display()
+            );
         }
         // Periodic: snapshot per-torrent stats from the engine → enqueue
         // on the sink → flush to disk. Cadence is `--flush-secs` (default

@@ -9,9 +9,16 @@
 //! `AlertQueue` reports `PieceCompleted` for each piece plus
 //! `TorrentState::Completed` at the end. No real sockets, no tokio runtime
 //! needed by the seeder beyond `bytes`-shuffling.
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::cast_lossless,
-    clippy::needless_collect, clippy::too_many_lines, clippy::manual_assert,
-    clippy::unchecked_time_subtraction, clippy::significant_drop_tightening)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless,
+    clippy::needless_collect,
+    clippy::too_many_lines,
+    clippy::manual_assert,
+    clippy::unchecked_time_subtraction,
+    clippy::significant_drop_tightening
+)]
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -106,7 +113,13 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
         let remote = perform_handshake(&mut io, &leech_handshake_cfg, HandshakeRole::Initiator)
             .await
             .expect("leecher handshake");
-        let conn = PeerConn::new(io, slot, leech_handshake_cfg, peer_to_session_tx, session_to_peer_rx);
+        let conn = PeerConn::new(
+            io,
+            slot,
+            leech_handshake_cfg,
+            peer_to_session_tx,
+            session_to_peer_rx,
+        );
         conn.run(remote).await;
     });
     let torrent_task = tokio::spawn(async move { torrent.run().await });
@@ -142,7 +155,12 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
                         .await
                         .unwrap();
                 }
-                Ok(Message::Interested | Message::NotInterested | Message::KeepAlive | Message::Have(_)) => {}
+                Ok(
+                    Message::Interested
+                    | Message::NotInterested
+                    | Message::KeepAlive
+                    | Message::Have(_),
+                ) => {}
                 Ok(other) => {
                     eprintln!("seeder ignoring {other:?}");
                 }
@@ -183,12 +201,18 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
         .await
         .expect("torrent should exit within 2s of Shutdown")
         .expect("torrent task panicked");
-    assert_eq!(final_state, magpie_bt_core::session::TorrentState::Completed);
+    assert_eq!(
+        final_state,
+        magpie_bt_core::session::TorrentState::Completed
+    );
 
     // Storage byte-equality.
     let mut got = vec![0u8; TOTAL as usize];
     storage.read_block(0, &mut got).unwrap();
-    assert_eq!(got, payload, "storage must hold the seeded payload byte-for-byte");
+    assert_eq!(
+        got, payload,
+        "storage must hold the seeded payload byte-for-byte"
+    );
 
     // Alert sequence should contain PieceCompleted * PIECE_COUNT.
     all_alerts.extend(alerts.drain());
@@ -218,10 +242,7 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
         disk_metrics.pieces_written.load(Ordering::Relaxed),
         u64::from(PIECE_COUNT)
     );
-    assert_eq!(
-        disk_metrics.bytes_written.load(Ordering::Relaxed),
-        TOTAL,
-    );
+    assert_eq!(disk_metrics.bytes_written.load(Ordering::Relaxed), TOTAL,);
     assert_eq!(disk_metrics.piece_verify_fail.load(Ordering::Relaxed), 0);
     assert_eq!(disk_metrics.io_failures.load(Ordering::Relaxed), 0);
 

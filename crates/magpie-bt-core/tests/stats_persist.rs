@@ -23,12 +23,16 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use magpie_bt_core::session::stats::sink::{FileStatsSink, StatsSink};
 use magpie_bt_core::session::stats::StatsSnapshot;
+use magpie_bt_core::session::stats::sink::{FileStatsSink, StatsSink};
 use tempfile::tempdir;
 
 const fn snapshot(info_hash: [u8; 20], up: u64, down: u64) -> StatsSnapshot {
-    StatsSnapshot { info_hash, uploaded: up, downloaded: down }
+    StatsSnapshot {
+        info_hash,
+        uploaded: up,
+        downloaded: down,
+    }
 }
 
 fn sidecar_exists(dir: &Path, info_hash: &[u8; 20]) -> bool {
@@ -50,7 +54,8 @@ fn counters_survive_sink_drop_and_reconstruction() {
     let pre_down = 67_890_u64;
     {
         let sink = FileStatsSink::new(dir.path()).expect("create sink");
-        sink.enqueue(snapshot(info_hash, pre_up, pre_down)).expect("enqueue");
+        sink.enqueue(snapshot(info_hash, pre_up, pre_down))
+            .expect("enqueue");
         sink.flush_now().expect("flush_now");
 
         // Sidecar must be on disk before drop — otherwise we'd be testing
@@ -113,10 +118,14 @@ fn load_sidecar_rejects_truncated_file() {
     let path = sink.sidecar_path(&info_hash);
     std::fs::write(&path, b"d10:downloadedi67890e8:uploadedi1234").unwrap();
 
-    let err = sink.load_sidecar(&info_hash).expect_err("must fail on truncated input");
+    let err = sink
+        .load_sidecar(&info_hash)
+        .expect_err("must fail on truncated input");
     let msg = format!("{err}");
-    assert!(msg.to_lowercase().contains("decode") || msg.to_lowercase().contains("invalid"),
-        "expected decode-class error, got: {msg}");
+    assert!(
+        msg.to_lowercase().contains("decode") || msg.to_lowercase().contains("invalid"),
+        "expected decode-class error, got: {msg}"
+    );
 }
 
 #[test]

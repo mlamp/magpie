@@ -57,7 +57,10 @@ async fn state_after_add_matches_params() {
     assert_eq!(state.info_hash, info_hash);
     assert_eq!(state.total_length, TOTAL);
     assert_eq!(state.peer_count, 0);
-    assert!(state.peer_cap > 0, "default per-torrent cap must be positive");
+    assert!(
+        state.peer_cap > 0,
+        "default per-torrent cap must be positive"
+    );
 
     engine.shutdown(id).await;
     engine.join().await;

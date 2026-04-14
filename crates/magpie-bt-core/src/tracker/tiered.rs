@@ -109,9 +109,7 @@ impl Tracker for TieredTracker {
                     Err(e) => last_err = Some(e),
                 }
             }
-            Err(last_err.unwrap_or(TrackerError::InvalidUrl(
-                "no trackers configured".into(),
-            )))
+            Err(last_err.unwrap_or(TrackerError::InvalidUrl("no trackers configured".into())))
         })
     }
 }
@@ -173,8 +171,13 @@ mod tests {
 
     #[tokio::test]
     async fn tier_fall_through_tries_tier_1_when_tier_0_fails() {
-        let t1: Arc<dyn Tracker> = Arc::new(FailingTracker { calls: AtomicU32::new(0) });
-        let t2: Arc<dyn Tracker> = Arc::new(OkTracker { calls: AtomicU32::new(0), id: 7 });
+        let t1: Arc<dyn Tracker> = Arc::new(FailingTracker {
+            calls: AtomicU32::new(0),
+        });
+        let t2: Arc<dyn Tracker> = Arc::new(OkTracker {
+            calls: AtomicU32::new(0),
+            id: 7,
+        });
         let tiered = TieredTracker::new(vec![vec![Arc::clone(&t1)], vec![Arc::clone(&t2)]]);
         let resp = tiered.announce(sample_req()).await.unwrap();
         assert_eq!(resp.tracker_id, Some(vec![7]));
@@ -182,8 +185,13 @@ mod tests {
 
     #[tokio::test]
     async fn success_promotes_tracker_to_tier_head() {
-        let a: Arc<dyn Tracker> = Arc::new(FailingTracker { calls: AtomicU32::new(0) });
-        let b: Arc<dyn Tracker> = Arc::new(OkTracker { calls: AtomicU32::new(0), id: 9 });
+        let a: Arc<dyn Tracker> = Arc::new(FailingTracker {
+            calls: AtomicU32::new(0),
+        });
+        let b: Arc<dyn Tracker> = Arc::new(OkTracker {
+            calls: AtomicU32::new(0),
+            id: 9,
+        });
         // Within one tier: first fails, second succeeds. On next announce,
         // the second one should be tried first.
         let tiered = TieredTracker::new(vec![vec![Arc::clone(&a), Arc::clone(&b)]]);
@@ -196,8 +204,12 @@ mod tests {
 
     #[tokio::test]
     async fn all_trackers_failing_returns_last_error() {
-        let a: Arc<dyn Tracker> = Arc::new(FailingTracker { calls: AtomicU32::new(0) });
-        let b: Arc<dyn Tracker> = Arc::new(FailingTracker { calls: AtomicU32::new(0) });
+        let a: Arc<dyn Tracker> = Arc::new(FailingTracker {
+            calls: AtomicU32::new(0),
+        });
+        let b: Arc<dyn Tracker> = Arc::new(FailingTracker {
+            calls: AtomicU32::new(0),
+        });
         let tiered = TieredTracker::new(vec![vec![a], vec![b]]);
         let err = tiered.announce(sample_req()).await.unwrap_err();
         assert!(matches!(err, TrackerError::Failure(_)));
@@ -205,7 +217,10 @@ mod tests {
 
     #[test]
     fn empty_tiers_filtered() {
-        let t: Arc<dyn Tracker> = Arc::new(OkTracker { calls: AtomicU32::new(0), id: 1 });
+        let t: Arc<dyn Tracker> = Arc::new(OkTracker {
+            calls: AtomicU32::new(0),
+            id: 1,
+        });
         let tiered = TieredTracker::new(vec![vec![], vec![t], vec![]]);
         assert_eq!(tiered.tier_order().len(), 1);
     }

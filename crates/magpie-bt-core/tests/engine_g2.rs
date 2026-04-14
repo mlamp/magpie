@@ -16,9 +16,7 @@
 use std::sync::Arc;
 
 use magpie_bt_core::alerts::AlertQueue;
-use magpie_bt_core::engine::{
-    AddTorrentRequest, Engine, TorrentId, TorrentNotFoundError,
-};
+use magpie_bt_core::engine::{AddTorrentRequest, Engine, TorrentId, TorrentNotFoundError};
 use magpie_bt_core::session::TorrentParams;
 use magpie_bt_core::storage::{FileStorage, MemoryStorage, Storage};
 use tempfile::tempdir;
@@ -54,8 +52,14 @@ async fn remove_keeps_files_when_delete_files_false() {
         .unwrap();
 
     engine.remove(id, false).await.expect("remove ok");
-    assert!(engine.torrents().await.is_empty(), "id removed from registry");
-    assert!(path.exists(), "file must still be on disk when delete_files=false");
+    assert!(
+        engine.torrents().await.is_empty(),
+        "id removed from registry"
+    );
+    assert!(
+        path.exists(),
+        "file must still be on disk when delete_files=false"
+    );
 
     engine.join().await;
 }
@@ -79,7 +83,10 @@ async fn remove_unlinks_file_when_delete_files_true() {
 
     engine.remove(id, true).await.expect("remove ok");
     assert!(engine.torrents().await.is_empty());
-    assert!(!path.exists(), "file must be unlinked when delete_files=true");
+    assert!(
+        !path.exists(),
+        "file must be unlinked when delete_files=true"
+    );
 
     engine.join().await;
 }
@@ -109,7 +116,10 @@ async fn remove_with_memory_storage_is_noop_delete() {
         .await
         .unwrap();
 
-    engine.remove(id, true).await.expect("memory delete is no-op");
+    engine
+        .remove(id, true)
+        .await
+        .expect("memory delete is no-op");
     assert!(engine.torrents().await.is_empty());
     engine.join().await;
 }

@@ -147,7 +147,9 @@ fn decode_body(id_byte: u8, payload: bytes::Bytes) -> Result<Message, WireError>
         id::NOT_INTERESTED => empty(&payload, Message::NotInterested, id_byte),
         id::HAVE => Ok(Message::Have(read_u32(&payload).ok_or_else(malformed)?)),
         id::BITFIELD => Ok(Message::Bitfield(payload)),
-        id::REQUEST => read_block_request(&payload).map(Message::Request).ok_or_else(malformed),
+        id::REQUEST => read_block_request(&payload)
+            .map(Message::Request)
+            .ok_or_else(malformed),
         id::PIECE => {
             // W2: cap Piece payload at `BLOCK_SIZE + 8`. v2 mandates 16 KiB
             // blocks; any peer asking us to buffer more is either buggy or
@@ -158,23 +160,36 @@ fn decode_body(id_byte: u8, payload: bytes::Bytes) -> Result<Message, WireError>
             let piece = u32::from_be_bytes(payload[0..4].try_into().unwrap());
             let offset = u32::from_be_bytes(payload[4..8].try_into().unwrap());
             let data = payload.slice(8..);
-            Ok(Message::Piece(Block { piece, offset, data }))
+            Ok(Message::Piece(Block {
+                piece,
+                offset,
+                data,
+            }))
         }
-        id::CANCEL => read_block_request(&payload).map(Message::Cancel).ok_or_else(malformed),
+        id::CANCEL => read_block_request(&payload)
+            .map(Message::Cancel)
+            .ok_or_else(malformed),
         id::HAVE_ALL => empty(&payload, Message::HaveAll, id_byte),
         id::HAVE_NONE => empty(&payload, Message::HaveNone, id_byte),
-        id::SUGGEST_PIECE => Ok(Message::SuggestPiece(read_u32(&payload).ok_or_else(malformed)?)),
+        id::SUGGEST_PIECE => Ok(Message::SuggestPiece(
+            read_u32(&payload).ok_or_else(malformed)?,
+        )),
         id::REJECT_REQUEST => read_block_request(&payload)
             .map(Message::RejectRequest)
             .ok_or_else(malformed),
-        id::ALLOWED_FAST => Ok(Message::AllowedFast(read_u32(&payload).ok_or_else(malformed)?)),
+        id::ALLOWED_FAST => Ok(Message::AllowedFast(
+            read_u32(&payload).ok_or_else(malformed)?,
+        )),
         id::EXTENDED => {
             if payload.is_empty() {
                 return Err(malformed());
             }
             let ext_id = payload[0];
             let body = payload.slice(1..);
-            Ok(Message::Extended { id: ext_id, payload: body })
+            Ok(Message::Extended {
+                id: ext_id,
+                payload: body,
+            })
         }
         other => Err(WireError::UnknownId { id: other }),
     }
@@ -184,7 +199,10 @@ fn empty(payload: &bytes::Bytes, msg: Message, id_byte: u8) -> Result<Message, W
     if payload.is_empty() {
         Ok(msg)
     } else {
-        Err(WireError::MalformedPayload { id: id_byte, len: payload.len() })
+        Err(WireError::MalformedPayload {
+            id: id_byte,
+            len: payload.len(),
+        })
     }
 }
 
@@ -202,7 +220,11 @@ fn read_block_request(bytes: &[u8]) -> Option<BlockRequest> {
     let piece = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
     let offset = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
     let length = u32::from_be_bytes(bytes[8..12].try_into().unwrap());
-    Some(BlockRequest { piece, offset, length })
+    Some(BlockRequest {
+        piece,
+        offset,
+        length,
+    })
 }
 
 fn encode_message(msg: &Message, dst: &mut BytesMut, max_payload: u32) -> Result<(), WireError> {
@@ -228,7 +250,10 @@ fn encode_message(msg: &Message, dst: &mut BytesMut, max_payload: u32) -> Result
     fn check_payload(len: usize, max: u32) -> Result<u32, WireError> {
         let n_clamped = u32::try_from(len).unwrap_or(u32::MAX);
         if n_clamped > max || u32::try_from(len).is_err() {
-            return Err(WireError::PayloadTooLarge { len: n_clamped, max });
+            return Err(WireError::PayloadTooLarge {
+                len: n_clamped,
+                max,
+            });
         }
         Ok(n_clamped)
     }
@@ -251,7 +276,11 @@ fn encode_message(msg: &Message, dst: &mut BytesMut, max_payload: u32) -> Result
             dst.extend_from_slice(b);
         }
         Message::Request(r) => put_block_request(dst, id::REQUEST, r),
-        Message::Piece(Block { piece, offset, data }) => {
+        Message::Piece(Block {
+            piece,
+            offset,
+            data,
+        }) => {
             let len = check_payload(1 + 8 + data.len(), max_payload)?;
             dst.reserve(4 + len as usize);
             dst.put_u32(len);
@@ -266,7 +295,10 @@ fn encode_message(msg: &Message, dst: &mut BytesMut, max_payload: u32) -> Result
         Message::SuggestPiece(p) => put_u32_msg(dst, id::SUGGEST_PIECE, *p),
         Message::RejectRequest(r) => put_block_request(dst, id::REJECT_REQUEST, r),
         Message::AllowedFast(p) => put_u32_msg(dst, id::ALLOWED_FAST, *p),
-        Message::Extended { id: ext_id, payload } => {
+        Message::Extended {
+            id: ext_id,
+            payload,
+        } => {
             let len = check_payload(1 + 1 + payload.len(), max_payload)?;
             dst.reserve(4 + len as usize);
             dst.put_u32(len);
@@ -374,7 +406,10 @@ mod tests {
         let mut buf = BytesMut::new();
         buf.put_u32(1024);
         let err = codec.decode(&mut buf).unwrap_err();
-        assert!(matches!(err, WireError::PayloadTooLarge { len: 1024, max: 16 }));
+        assert!(matches!(
+            err,
+            WireError::PayloadTooLarge { len: 1024, max: 16 }
+        ));
     }
 
     #[test]
@@ -395,7 +430,13 @@ mod tests {
         buf.put_u8(id::HAVE);
         buf.put_u8(0);
         let err = codec.decode(&mut buf).unwrap_err();
-        assert!(matches!(err, WireError::MalformedPayload { id: id::HAVE, len: 1 }));
+        assert!(matches!(
+            err,
+            WireError::MalformedPayload {
+                id: id::HAVE,
+                len: 1
+            }
+        ));
     }
 
     #[test]
@@ -406,7 +447,13 @@ mod tests {
         buf.put_u8(id::CHOKE);
         buf.put_u8(0);
         let err = codec.decode(&mut buf).unwrap_err();
-        assert!(matches!(err, WireError::MalformedPayload { id: id::CHOKE, len: 1 }));
+        assert!(matches!(
+            err,
+            WireError::MalformedPayload {
+                id: id::CHOKE,
+                len: 1
+            }
+        ));
     }
 
     #[test]
@@ -417,7 +464,13 @@ mod tests {
         buf.put_u8(id::EXTENDED);
         // payload is empty after id byte → malformed
         let err = codec.decode(&mut buf).unwrap_err();
-        assert!(matches!(err, WireError::MalformedPayload { id: id::EXTENDED, .. }));
+        assert!(matches!(
+            err,
+            WireError::MalformedPayload {
+                id: id::EXTENDED,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -431,7 +484,10 @@ mod tests {
         buf.put_u8(id::PIECE);
         buf.put_bytes(0, oversized as usize);
         let err = codec.decode(&mut buf).unwrap_err();
-        assert!(matches!(err, WireError::MalformedPayload { id: id::PIECE, .. }));
+        assert!(matches!(
+            err,
+            WireError::MalformedPayload { id: id::PIECE, .. }
+        ));
     }
 
     #[test]
@@ -465,10 +521,23 @@ mod tests {
         assert_eq!(
             &buf[..],
             &[
-                0, 0, 0, 13, // length = 13
-                id::REQUEST, 0, 0, 0, 1, // piece
-                0, 0, 0, 2, // offset
-                0, 0, 0, 3, // length
+                0,
+                0,
+                0,
+                13, // length = 13
+                id::REQUEST,
+                0,
+                0,
+                0,
+                1, // piece
+                0,
+                0,
+                0,
+                2, // offset
+                0,
+                0,
+                0,
+                3, // length
             ]
         );
     }

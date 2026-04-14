@@ -9,8 +9,14 @@
 //! `SIGKILL` test piles more requirements onto it.
 //! SIGKILL test piles more requirements onto it.
 #![cfg(unix)]
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::too_many_lines,
-    clippy::items_after_statements, clippy::doc_markdown, clippy::collapsible_if)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::doc_markdown,
+    clippy::collapsible_if
+)]
 
 use std::io::Write as _;
 use std::process::{Command, Stdio};
@@ -91,10 +97,14 @@ async fn magpie_leech_can_fetch_from_seeder_example_binary() {
     assert!(exe.exists(), "seeder binary not found at {}", exe.display());
 
     let mut child = Command::new(&exe)
-        .arg("--torrent").arg(&torrent_path)
-        .arg("--data").arg(&data_path)
-        .arg("--listen").arg("127.0.0.1:0")
-        .arg("--stats-dir").arg(&stats_path)
+        .arg("--torrent")
+        .arg(&torrent_path)
+        .arg("--data")
+        .arg(&data_path)
+        .arg("--listen")
+        .arg("127.0.0.1:0")
+        .arg("--stats-dir")
+        .arg(&stats_path)
         .arg("--allow-loopback")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -105,7 +115,7 @@ async fn magpie_leech_can_fetch_from_seeder_example_binary() {
     // spot the "listening on" line so the seeder's subsequent eprintln!
     // calls don't SIGPIPE when the pipe closes. Same for stdout.
     use std::io::{BufRead, BufReader};
-    use std::sync::mpsc::{channel, RecvTimeoutError};
+    use std::sync::mpsc::{RecvTimeoutError, channel};
     let stderr = child.stderr.take().expect("stderr");
     let stdout = child.stdout.take().expect("stdout");
     let (port_tx, port_rx) = channel::<u16>();
@@ -157,8 +167,14 @@ async fn magpie_leech_can_fetch_from_seeder_example_binary() {
         *b"-Mg0001-ssmkleech01a",
     );
     leech_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
-    let leech_tid = leech_engine.add_torrent(leech_req).await.expect("leech add");
-    leech_engine.add_peer(leech_tid, seed_addr).await.expect("connect");
+    let leech_tid = leech_engine
+        .add_torrent(leech_req)
+        .await
+        .expect("leech add");
+    leech_engine
+        .add_peer(leech_tid, seed_addr)
+        .await
+        .expect("connect");
 
     let drive_deadline = Instant::now() + Duration::from_secs(15);
     let mut completed = 0_usize;

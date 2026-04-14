@@ -18,7 +18,9 @@ impl LeechChoker {
     /// Construct with default [`ChokerConfig`].
     #[must_use]
     pub fn new() -> Self {
-        Self { cfg: ChokerConfig::default() }
+        Self {
+            cfg: ChokerConfig::default(),
+        }
     }
 
     /// Construct with a custom config.
@@ -65,7 +67,10 @@ impl Unchoker for LeechChoker {
             self.cfg.new_peer_weight,
             rotation_counter,
         );
-        UnchokeSet { regular, optimistic }
+        UnchokeSet {
+            regular,
+            optimistic,
+        }
     }
 
     fn config(&self) -> &ChokerConfig {
@@ -105,7 +110,10 @@ mod tests {
         let set = ch.select(&peers, now, 0);
         // Top 4 by down rate: 2(500), 4(300), 3(200), 1(100). Optimistic:
         // whatever is left, which is peer 5.
-        assert_eq!(set.regular, vec![PeerSlot(2), PeerSlot(4), PeerSlot(3), PeerSlot(1)]);
+        assert_eq!(
+            set.regular,
+            vec![PeerSlot(2), PeerSlot(4), PeerSlot(3), PeerSlot(1)]
+        );
         assert_eq!(set.optimistic, vec![PeerSlot(5)]);
     }
 
@@ -120,7 +128,10 @@ mod tests {
             peer(3, 300, now),
         ];
         let set = ch.select(&peers, now, 0);
-        assert!(!set.regular.contains(&PeerSlot(1)), "snubbed peer must not be unchoked");
+        assert!(
+            !set.regular.contains(&PeerSlot(1)),
+            "snubbed peer must not be unchoked"
+        );
         assert!(set.regular.contains(&PeerSlot(2)));
         assert!(set.regular.contains(&PeerSlot(3)));
     }
@@ -129,11 +140,7 @@ mod tests {
     fn tie_break_deterministic_by_slot_id() {
         let ch = LeechChoker::new();
         let now = Instant::now();
-        let peers = vec![
-            peer(9, 100, now),
-            peer(5, 100, now),
-            peer(7, 100, now),
-        ];
+        let peers = vec![peer(9, 100, now), peer(5, 100, now), peer(7, 100, now)];
         let set = ch.select(&peers, now, 0);
         // Equal rates → sorted by slot id ascending.
         assert_eq!(set.regular, vec![PeerSlot(5), PeerSlot(7), PeerSlot(9)]);

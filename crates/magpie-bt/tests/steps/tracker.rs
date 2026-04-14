@@ -1,6 +1,9 @@
 //! Tracker / BEP 23 step definitions.
-#![allow(clippy::needless_pass_by_ref_mut, clippy::needless_pass_by_value,
-    clippy::used_underscore_binding)]
+#![allow(
+    clippy::needless_pass_by_ref_mut,
+    clippy::needless_pass_by_value,
+    clippy::used_underscore_binding
+)]
 
 use cucumber::{given, then, when};
 use magpie_bt_core::tracker::{TrackerError, parse_response};
@@ -16,7 +19,9 @@ fn given_announce_v4(world: &mut MagpieWorld) {
     world.announce_bytes = payload;
 }
 
-#[given(regex = r#"^a bencoded announce response with interval 900 and one compact v6 peer at "(.+)"$"#)]
+#[given(
+    regex = r#"^a bencoded announce response with interval 900 and one compact v6 peer at "(.+)"$"#
+)]
 fn given_announce_v6(world: &mut MagpieWorld, _addr: String) {
     // Build a minimal v6 list: ::1 + port 6881
     let mut octets = [0u8; 18];

@@ -13,10 +13,18 @@
 //! fixed wall-clock window, then compute `bytes_transferred /
 //! elapsed_secs` and assert ≥ 0.80 × pinned_rate.
 #![cfg(unix)]
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::cast_precision_loss,
-    clippy::cast_sign_loss, clippy::doc_markdown, clippy::manual_assert,
-    clippy::await_holding_lock, clippy::identity_op, clippy::uninlined_format_args,
-    clippy::unchecked_time_subtraction)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::doc_markdown,
+    clippy::manual_assert,
+    clippy::await_holding_lock,
+    clippy::identity_op,
+    clippy::uninlined_format_args,
+    clippy::unchecked_time_subtraction
+)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -99,7 +107,10 @@ async fn shaper_pinned_rate_observed_within_tolerance() {
         *b"-Mg0001-tflleech01ab",
     );
     leech_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
-    let leech_tid = leech_engine.add_torrent(leech_req).await.expect("leech add");
+    let leech_tid = leech_engine
+        .add_torrent(leech_req)
+        .await
+        .expect("leech add");
     leech_engine
         .add_peer(leech_tid, seed_addr)
         .await
@@ -143,9 +154,7 @@ async fn shaper_pinned_rate_observed_within_tolerance() {
     let mut completed = 0_usize;
     while completed < PIECE_COUNT as usize {
         if start.elapsed() > drive_timeout {
-            panic!(
-                "throughput test timed out at {completed}/{PIECE_COUNT} pieces"
-            );
+            panic!("throughput test timed out at {completed}/{PIECE_COUNT} pieces");
         }
         let drained = leech_alerts.drain();
         completed += drained

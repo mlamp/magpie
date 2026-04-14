@@ -133,7 +133,9 @@ impl PeerUploadQueue {
             if choked_at.elapsed() < POST_CHOKE_GRACE {
                 // Within grace: accept as if unchoked.
             } else if self.allowed_fast.contains(&req.piece) {
-                let cap = self.blocks_per_piece.saturating_mul(FAST_SET_ABUSE_MULTIPLIER);
+                let cap = self
+                    .blocks_per_piece
+                    .saturating_mul(FAST_SET_ABUSE_MULTIPLIER);
                 if self.fast_set_uses >= cap {
                     return AcceptOutcome::FastSetAbuse;
                 }
@@ -182,7 +184,8 @@ impl PeerUploadQueue {
         }
         // Fast ext: only non-allowed-fast entries drop.
         self.queue.retain(|r| self.allowed_fast.contains(&r.piece));
-        self.in_flight.retain(|r| self.allowed_fast.contains(&r.piece));
+        self.in_flight
+            .retain(|r| self.allowed_fast.contains(&r.piece));
     }
 
     /// We sent `Unchoke` to the peer. Reset grace + abuse counters.
@@ -256,8 +259,11 @@ pub const fn default_blocks_per_piece(piece_length: u32) -> u32 {
 }
 
 #[cfg(test)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss,
-    clippy::unchecked_time_subtraction)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::unchecked_time_subtraction
+)]
 mod tests {
     use super::*;
 
@@ -270,7 +276,10 @@ mod tests {
         let mut q = PeerUploadQueue::with_cap(16, 3);
         assert_eq!(q.accept_request(req(0, 0)), AcceptOutcome::Queued);
         assert_eq!(q.accept_request(req(0, BLOCK_SIZE)), AcceptOutcome::Queued);
-        assert_eq!(q.accept_request(req(0, 2 * BLOCK_SIZE)), AcceptOutcome::Queued);
+        assert_eq!(
+            q.accept_request(req(0, 2 * BLOCK_SIZE)),
+            AcceptOutcome::Queued
+        );
         assert_eq!(q.accept_request(req(1, 0)), AcceptOutcome::DroppedNewest);
     }
 

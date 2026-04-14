@@ -14,9 +14,7 @@
 use std::sync::Arc;
 
 use magpie_bt_core::alerts::AlertQueue;
-use magpie_bt_core::engine::{
-    AddTorrentRequest, Engine, TorrentId, TorrentNotFoundError,
-};
+use magpie_bt_core::engine::{AddTorrentRequest, Engine, TorrentId, TorrentNotFoundError};
 use magpie_bt_core::session::TorrentParams;
 use magpie_bt_core::storage::MemoryStorage;
 

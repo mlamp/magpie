@@ -6,7 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use magpie_bt_wire::{Block, BlockRequest, HANDSHAKE_LEN, Handshake, Message, WireCodec, WireError};
+use magpie_bt_wire::{
+    Block, BlockRequest, HANDSHAKE_LEN, Handshake, Message, WireCodec, WireError,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_util::codec::Framed;
@@ -203,10 +205,7 @@ where
         .map_or(Err(HandshakeError::Timeout(timeout)), |res| res)
 }
 
-async fn write_handshake_bytes<S>(
-    stream: &mut S,
-    config: &PeerConfig,
-) -> Result<(), HandshakeError>
+async fn write_handshake_bytes<S>(stream: &mut S, config: &PeerConfig) -> Result<(), HandshakeError>
 where
     S: AsyncWrite + Unpin,
 {
@@ -303,10 +302,7 @@ where
     /// Attach a peer-stats handle (ADR-0014). Counters are incremented
     /// on the hot path at the same sites as `shaper.try_consume`.
     #[must_use]
-    pub fn with_peer_stats(
-        mut self,
-        peer_stats: Arc<crate::session::stats::PeerStats>,
-    ) -> Self {
+    pub fn with_peer_stats(mut self, peer_stats: Arc<crate::session::stats::PeerStats>) -> Self {
         self.peer_stats = Some(peer_stats);
         self
     }
@@ -341,7 +337,10 @@ where
         // Best-effort shutdown notification — session may already be gone.
         let _ = self
             .tx_to_session
-            .send(PeerToSession::Disconnected { slot: self.slot, reason })
+            .send(PeerToSession::Disconnected {
+                slot: self.slot,
+                reason,
+            })
             .await;
     }
 
@@ -477,12 +476,24 @@ where
             Message::Unchoke => PeerToSession::Unchoked { slot: self.slot },
             Message::Interested => PeerToSession::Interested { slot: self.slot },
             Message::NotInterested => PeerToSession::NotInterested { slot: self.slot },
-            Message::Have(piece) => PeerToSession::Have { slot: self.slot, piece },
-            Message::Bitfield(bytes) => PeerToSession::Bitfield { slot: self.slot, bytes },
+            Message::Have(piece) => PeerToSession::Have {
+                slot: self.slot,
+                piece,
+            },
+            Message::Bitfield(bytes) => PeerToSession::Bitfield {
+                slot: self.slot,
+                bytes,
+            },
             Message::HaveAll => PeerToSession::HaveAll { slot: self.slot },
             Message::HaveNone => PeerToSession::HaveNone { slot: self.slot },
-            Message::Request(req) => PeerToSession::BlockRequested { slot: self.slot, req },
-            Message::Cancel(req) => PeerToSession::RequestCancelled { slot: self.slot, req },
+            Message::Request(req) => PeerToSession::BlockRequested {
+                slot: self.slot,
+                req,
+            },
+            Message::Cancel(req) => PeerToSession::RequestCancelled {
+                slot: self.slot,
+                req,
+            },
             Message::Piece(block) => {
                 let len = u32::try_from(block.data.len()).unwrap_or(u32::MAX);
                 let req = BlockRequest::new(block.piece, block.offset, len);
@@ -511,7 +522,10 @@ where
             }
             Message::RejectRequest(req) => {
                 self.in_flight.remove(&req);
-                PeerToSession::Rejected { slot: self.slot, req }
+                PeerToSession::Rejected {
+                    slot: self.slot,
+                    req,
+                }
             }
             // BEP 6 hints (SuggestPiece, AllowedFast) and BEP 10 Extended are
             // accepted but not yet wired into the picker. `Message` is

@@ -26,7 +26,7 @@ use sha1::{Digest as _, Sha1};
 #[non_exhaustive]
 pub struct SyntheticTorrent {
     /// Bencode-encoded `.torrent` bytes. Feed to
-    /// [`crate::parse`](crate::parse) to obtain a [`MetaInfo`](crate::MetaInfo).
+    /// [`crate::parse`] to obtain a [`MetaInfo`].
     pub torrent: Vec<u8>,
     /// Raw file content matching the torrent's piece hashes. `len()` equals
     /// `piece_length * piece_count`.
@@ -63,7 +63,10 @@ pub fn synthetic_torrent_v1(
     seed: u64,
 ) -> SyntheticTorrent {
     assert!(piece_length >= MIN_PIECE_LENGTH, "piece_length < 16 KiB");
-    assert!(piece_length.is_power_of_two(), "piece_length not power of two");
+    assert!(
+        piece_length.is_power_of_two(),
+        "piece_length not power of two"
+    );
     assert!(piece_count > 0, "piece_count must be > 0");
 
     let total_length = u64::from(piece_length) * u64::from(piece_count);

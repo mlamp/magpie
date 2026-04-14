@@ -153,7 +153,10 @@ impl UdpDemux {
         }
         guard.insert(
             transaction_id,
-            PendingTxn { sender: tx, expires_at: Instant::now() + ttl },
+            PendingTxn {
+                sender: tx,
+                expires_at: Instant::now() + ttl,
+            },
         );
         drop(guard);
         Ok(rx)
@@ -172,7 +175,8 @@ impl UdpDemux {
     /// Observability hook — count of unmatched datagrams since bind.
     #[must_use]
     pub fn dropped_unmatched(&self) -> u64 {
-        self.dropped_unmatched.load(std::sync::atomic::Ordering::Relaxed)
+        self.dropped_unmatched
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn run_recv_loop(self: Arc<Self>) {
@@ -204,7 +208,8 @@ impl UdpDemux {
         // We route by transaction_id; first-byte classification (DHT/uTP) is
         // a future hook not wired in M2.
         if packet.len() < 8 {
-            self.dropped_unmatched.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.dropped_unmatched
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         }
         let txid = u32::from_be_bytes([packet[4], packet[5], packet[6], packet[7]]);
@@ -213,9 +218,13 @@ impl UdpDemux {
             guard.remove(&txid).map(|p| p.sender)
         };
         if let Some(sender) = sender {
-            let _ = sender.send(TrackerResponse { from, data: packet.to_vec() });
+            let _ = sender.send(TrackerResponse {
+                from,
+                data: packet.to_vec(),
+            });
         } else {
-            self.dropped_unmatched.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.dropped_unmatched
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
@@ -236,12 +245,18 @@ mod tests {
         // client. The client registers a txid, sends a request, the
         // "tracker" echoes a response with the same txid, and the client
         // receives it via the registered oneshot.
-        let (client, _task_c) = UdpDemux::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
-        let (tracker, _task_t) = UdpDemux::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let (client, _task_c) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let (tracker, _task_t) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
         let tracker_addr = tracker.local_addr().unwrap();
 
         let txid: u32 = 0xCAFE_BABE;
-        let rx = client.register_tracker_response(txid, Duration::from_secs(5)).unwrap();
+        let rx = client
+            .register_tracker_response(txid, Duration::from_secs(5))
+            .unwrap();
 
         // Client sends a 16-byte request; tracker fabricates a response with
         // the same txid in bytes 4..8.
@@ -259,30 +274,46 @@ mod tests {
         resp[4..8].copy_from_slice(&txid.to_be_bytes());
         tracker_reply.send_to(&resp, client_addr).await.unwrap();
 
-        let result = tokio::time::timeout(Duration::from_secs(2), rx).await.unwrap().unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), rx)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(result.data.len(), 20);
         assert_eq!(&result.data[4..8], &txid.to_be_bytes());
     }
 
     #[tokio::test]
     async fn duplicate_txid_rejected() {
-        let (demux, _task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
-        let _rx = demux.register_tracker_response(42, Duration::from_secs(5)).unwrap();
-        let err = demux.register_tracker_response(42, Duration::from_secs(5)).unwrap_err();
+        let (demux, _task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let _rx = demux
+            .register_tracker_response(42, Duration::from_secs(5))
+            .unwrap();
+        let err = demux
+            .register_tracker_response(42, Duration::from_secs(5))
+            .unwrap_err();
         assert!(matches!(err, DemuxError::DuplicateTransactionId(42)));
     }
 
     #[tokio::test]
     async fn short_packet_counted_as_unmatched() {
-        let (client, _task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let (client, _task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
         let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
 
         // Send a 4-byte packet (shorter than the 8-byte minimum header).
-        peer.send_to(&[0u8; 4], client.local_addr().unwrap()).await.unwrap();
+        peer.send_to(&[0u8; 4], client.local_addr().unwrap())
+            .await
+            .unwrap();
         // Poll until the counter increments or we time out.
         let deadline = Instant::now() + Duration::from_secs(2);
         while client.dropped_unmatched() == 0 {
-            assert!(Instant::now() <= deadline, "dropped_unmatched never incremented");
+            assert!(
+                Instant::now() <= deadline,
+                "dropped_unmatched never incremented"
+            );
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         assert!(client.dropped_unmatched() >= 1);

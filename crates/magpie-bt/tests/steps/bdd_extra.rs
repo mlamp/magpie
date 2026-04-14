@@ -4,18 +4,25 @@
 //! Wired in stage 10 of the M2 close-out plan. Scenarios that depend on an
 //! end-to-end UDP-tracker client wrapper (deferred per CHANGELOG) remain
 //! tagged in the .feature file with @deferred and aren't covered here.
-#![allow(clippy::needless_pass_by_value, clippy::needless_pass_by_ref_mut,
-    clippy::cast_possible_truncation, clippy::ptr_as_ptr,
-    clippy::map_unwrap_or, clippy::used_underscore_binding,
-    clippy::used_underscore_items, clippy::ptr_cast_constness,
-    clippy::as_ptr_cast_mut, clippy::ref_as_ptr)]
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::needless_pass_by_ref_mut,
+    clippy::cast_possible_truncation,
+    clippy::ptr_as_ptr,
+    clippy::map_unwrap_or,
+    clippy::used_underscore_binding,
+    clippy::used_underscore_items,
+    clippy::ptr_cast_constness,
+    clippy::as_ptr_cast_mut,
+    clippy::ref_as_ptr
+)]
 
 use std::sync::{Arc, Mutex};
 
 use cucumber::{given, then, when};
 use magpie_bt_core::tracker::tiered::TieredTracker;
 use magpie_bt_core::tracker::udp::{
-    decode_announce, decode_connect, encode_connect, retry_timeout, ACTION_CONNECT, PROTOCOL_ID,
+    ACTION_CONNECT, PROTOCOL_ID, decode_announce, decode_connect, encode_connect, retry_timeout,
 };
 use magpie_bt_core::tracker::{
     AnnounceFuture, AnnounceRequest, AnnounceResponse, Tracker, TrackerError,
@@ -32,7 +39,9 @@ struct FailingTracker;
 impl Tracker for FailingTracker {
     fn announce<'a>(&'a self, _req: AnnounceRequest<'a>) -> AnnounceFuture<'a> {
         Box::pin(async {
-            Err(TrackerError::Failure("intentional failure (BDD test)".into()))
+            Err(TrackerError::Failure(
+                "intentional failure (BDD test)".into(),
+            ))
         })
     }
 }
@@ -107,7 +116,9 @@ fn bep12_t0_failing(world: &mut MagpieWorld) {
     let key = Arc::as_ptr(&failing) as *const () as usize;
     world.tier_labels.push((key, "failing"));
     // Stash in tiered_a as a one-element first tier; the next Given mutates.
-    world.tiered_a = Some(Arc::new(TieredTracker::new(vec![vec![Arc::clone(&failing)]])));
+    world.tiered_a = Some(Arc::new(TieredTracker::new(vec![vec![Arc::clone(
+        &failing,
+    )]])));
     // Re-stash original Arc identities so the next And can append.
     // Workaround: also keep raw Arcs in tier_labels keyed map as "tier0".
     // (We rebuild a fresh TieredTracker once both tiers are known.)
@@ -184,7 +195,10 @@ async fn bep12_announce(world: &mut MagpieWorld) {
 #[when("announce is called successfully")]
 async fn bep12_announce_ok(world: &mut MagpieWorld) {
     let t = world.tiered.as_ref().expect("tiered set").clone();
-    let resp = t.announce(dummy_announce_request()).await.expect("announce ok");
+    let resp = t
+        .announce(dummy_announce_request())
+        .await
+        .expect("announce ok");
     world.tiered_peer_count = Some(resp.peers.len());
     world.announce_response = Some(resp);
 }
@@ -362,14 +376,16 @@ fn bep27_private_set(world: &mut MagpieWorld) {
     world.metainfo_bytes = b"d4:infod6:lengthi13e4:name5:hello\
         12:piece lengthi32768e\
         6:pieces20:aaaaaaaaaaaaaaaaaaaa\
-        7:privatei1eee".to_vec();
+        7:privatei1eee"
+        .to_vec();
 }
 
 #[given(regex = r#"^a metainfo whose info dict omits the "private" key$"#)]
 fn bep27_private_absent(world: &mut MagpieWorld) {
     world.metainfo_bytes = b"d4:infod6:lengthi13e4:name5:hello\
         12:piece lengthi32768e\
-        6:pieces20:aaaaaaaaaaaaaaaaaaaaee".to_vec();
+        6:pieces20:aaaaaaaaaaaaaaaaaaaaee"
+        .to_vec();
 }
 
 #[when("the metainfo is parsed")]

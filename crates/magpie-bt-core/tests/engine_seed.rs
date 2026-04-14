@@ -4,12 +4,21 @@
 //! `initial_have`, has a mock leecher client initiate over loopback, and
 //! verifies that after `Interested + Request` the client receives the
 //! correct block bytes.
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::cast_lossless,
-    clippy::too_many_lines, clippy::field_reassign_with_default,
-    clippy::doc_markdown, clippy::manual_assert, clippy::significant_drop_tightening,
-    clippy::unchecked_time_subtraction, clippy::similar_names,
-    clippy::used_underscore_binding, clippy::needless_pass_by_value,
-    clippy::needless_continue)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless,
+    clippy::too_many_lines,
+    clippy::field_reassign_with_default,
+    clippy::doc_markdown,
+    clippy::manual_assert,
+    clippy::significant_drop_tightening,
+    clippy::unchecked_time_subtraction,
+    clippy::similar_names,
+    clippy::used_underscore_binding,
+    clippy::needless_pass_by_value,
+    clippy::needless_continue
+)]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,7 +39,9 @@ const PIECE_COUNT: u32 = 2;
 const TOTAL: u64 = PIECE_LENGTH * PIECE_COUNT as u64;
 
 fn make_payload() -> Vec<u8> {
-    (0..TOTAL).map(|i| (i as u8).wrapping_mul(11).wrapping_add(3)).collect()
+    (0..TOTAL)
+        .map(|i| (i as u8).wrapping_mul(11).wrapping_add(3))
+        .collect()
 }
 
 fn piece_hashes(payload: &[u8]) -> Vec<u8> {
@@ -92,10 +103,15 @@ async fn engine_seeds_prepopulated_torrent_to_external_leecher() {
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_secs(5),
     };
-    perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator).await.expect("handshake");
+    perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
+        .await
+        .expect("handshake");
 
     let mut framed = Framed::new(stream, WireCodec::new(256 * 1024));
-    framed.send(Message::Interested).await.expect("send interested");
+    framed
+        .send(Message::Interested)
+        .await
+        .expect("send interested");
 
     // Expect Unchoke from the seeder.
     let deadline = std::time::Instant::now() + Duration::from_secs(3);
@@ -121,7 +137,10 @@ async fn engine_seeds_prepopulated_torrent_to_external_leecher() {
     // Request block 0 (full piece 0 in one read-size slice — test piece
     // length matches BLOCK_SIZE).
     let req_frame = BlockRequest::new(0, 0, PIECE_LENGTH as u32);
-    framed.send(Message::Request(req_frame)).await.expect("send request");
+    framed
+        .send(Message::Request(req_frame))
+        .await
+        .expect("send request");
 
     // Expect the matching Piece response.
     let deadline = std::time::Instant::now() + Duration::from_secs(3);

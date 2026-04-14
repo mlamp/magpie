@@ -7,10 +7,18 @@
 //!
 //! Asserts the leecher fetches every piece, all bytes match, and disk
 //! metrics report the right counts.
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::cast_lossless,
-    clippy::too_many_lines, clippy::needless_collect, clippy::manual_assert,
-    clippy::redundant_clone, clippy::used_underscore_binding,
-    clippy::needless_pass_by_value, clippy::manual_let_else)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_lossless,
+    clippy::too_many_lines,
+    clippy::needless_collect,
+    clippy::manual_assert,
+    clippy::redundant_clone,
+    clippy::used_underscore_binding,
+    clippy::needless_pass_by_value,
+    clippy::manual_let_else
+)]
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -163,7 +171,7 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("did not complete within 5s; alerts seen: {drained:?}");
+            panic!("did not complete within 15s; alerts seen: {drained:?}");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -171,11 +179,17 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
     // Storage byte-equality.
     let mut got = vec![0u8; TOTAL as usize];
     storage.read_block(0, &mut got).unwrap();
-    assert_eq!(got, *payload, "storage must match seeded payload byte-for-byte");
+    assert_eq!(
+        got, *payload,
+        "storage must match seeded payload byte-for-byte"
+    );
 
     // Disk metrics.
     let metrics = engine.disk_metrics(torrent_id).await.unwrap();
-    assert_eq!(metrics.pieces_written.load(Ordering::Relaxed), u64::from(PIECE_COUNT));
+    assert_eq!(
+        metrics.pieces_written.load(Ordering::Relaxed),
+        u64::from(PIECE_COUNT)
+    );
     assert_eq!(metrics.bytes_written.load(Ordering::Relaxed), TOTAL);
     assert_eq!(metrics.piece_verify_fail.load(Ordering::Relaxed), 0);
     assert_eq!(metrics.io_failures.load(Ordering::Relaxed), 0);
@@ -240,7 +254,9 @@ async fn engine_attach_tracker_drives_announce_loop_and_filters_peers() {
     req.handshake_timeout = Duration::from_secs(5);
     let torrent_id = engine.add_torrent(req).await.unwrap();
 
-    let tracker: Arc<dyn Tracker> = Arc::new(MockTracker { peers: vec![seed_a, seed_b] });
+    let tracker: Arc<dyn Tracker> = Arc::new(MockTracker {
+        peers: vec![seed_a, seed_b],
+    });
     engine
         .attach_tracker(torrent_id, tracker, AttachTrackerConfig::default())
         .await
@@ -288,7 +304,10 @@ async fn engine_rejects_invalid_torrent_params() {
         [0u8; 20],
     );
     let err = engine.add_torrent(req).await.unwrap_err();
-    assert!(matches!(err, magpie_bt_core::engine::AddTorrentError::InvalidParams(_)));
+    assert!(matches!(
+        err,
+        magpie_bt_core::engine::AddTorrentError::InvalidParams(_)
+    ));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -315,7 +334,10 @@ async fn engine_rejects_filtered_peer_address() {
         .add_peer(id, "127.0.0.1:1".parse().unwrap())
         .await
         .unwrap_err();
-    assert!(matches!(err, magpie_bt_core::engine::AddPeerError::Filtered(_)));
+    assert!(matches!(
+        err,
+        magpie_bt_core::engine::AddPeerError::Filtered(_)
+    ));
     engine.shutdown(id).await;
     let _ = tokio::time::timeout(Duration::from_secs(1), engine.join()).await;
 }

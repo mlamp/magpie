@@ -1,6 +1,10 @@
-#![allow(clippy::missing_const_for_fn, clippy::trivial_regex,
-    clippy::missing_panics_doc, clippy::needless_pass_by_value,
-    clippy::missing_fields_in_debug)]
+#![allow(
+    clippy::missing_const_for_fn,
+    clippy::trivial_regex,
+    clippy::missing_panics_doc,
+    clippy::needless_pass_by_value,
+    clippy::missing_fields_in_debug
+)]
 //! Cucumber (BDD) test harness for magpie.
 //!
 //! Features live in `tests/features/`, indexed by BEP number. See
@@ -63,11 +67,17 @@ impl std::fmt::Debug for MagpieWorld {
 
 impl MagpieWorld {
     fn last_decoded(&self) -> &Message {
-        self.decoded_message.as_ref().expect("a message must be decoded first")
+        self.decoded_message
+            .as_ref()
+            .expect("a message must be decoded first")
     }
 
     fn parsed_peers(&self) -> Vec<SocketAddr> {
-        self.announce_response.as_ref().expect("response parsed").peers.clone()
+        self.announce_response
+            .as_ref()
+            .expect("response parsed")
+            .peers
+            .clone()
     }
 }
 
@@ -77,4 +87,3 @@ mod steps;
 async fn main() {
     MagpieWorld::run("tests/features").await;
 }
-

@@ -46,7 +46,11 @@ impl FileStorage {
             .truncate(true)
             .open(&path)?;
         file.set_len(capacity)?;
-        Ok(Self { file, path, capacity })
+        Ok(Self {
+            file,
+            path,
+            capacity,
+        })
     }
 
     /// Opens an existing file for read+write without truncating, using the
@@ -61,7 +65,11 @@ impl FileStorage {
             .write(true)
             .open(&path)?;
         let capacity = file.metadata()?.len();
-        Ok(Self { file, path, capacity })
+        Ok(Self {
+            file,
+            path,
+            capacity,
+        })
     }
 
     /// Path the storage was constructed with. The only path magpie ever
@@ -114,9 +122,7 @@ impl Storage for FileStorage {
     /// the documented contract; readers/writers in flight when `delete` runs
     /// continue to operate against the now-unlinked inode.
     fn delete(&self) -> Result<(), StorageError> {
-        std::fs::remove_file(&self.path).map_err(|e| {
-            StorageError::new(StorageErrorKind::Io(e))
-        })
+        std::fs::remove_file(&self.path).map_err(|e| StorageError::new(StorageErrorKind::Io(e)))
     }
 }
 

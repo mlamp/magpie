@@ -162,7 +162,10 @@ mod tests {
     fn rejects_bad_pstr() {
         let mut bytes = sample().to_bytes();
         bytes[1] = b'X';
-        assert!(matches!(Handshake::decode(&bytes), Err(WireError::BadHandshakePstr)));
+        assert!(matches!(
+            Handshake::decode(&bytes),
+            Err(WireError::BadHandshakePstr)
+        ));
     }
 
     #[test]

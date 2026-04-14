@@ -30,7 +30,11 @@ impl BlockRequest {
     /// Construct a block address.
     #[must_use]
     pub const fn new(piece: u32, offset: u32, length: u32) -> Self {
-        Self { piece, offset, length }
+        Self {
+            piece,
+            offset,
+            length,
+        }
     }
 }
 
@@ -53,6 +57,10 @@ impl Block {
     /// Construct a block payload.
     #[must_use]
     pub const fn new(piece: u32, offset: u32, data: Bytes) -> Self {
-        Self { piece, offset, data }
+        Self {
+            piece,
+            offset,
+            data,
+        }
     }
 }

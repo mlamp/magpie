@@ -141,7 +141,10 @@ impl FileStatsSink {
     /// Will not panic in practice — the `try_from` conversions for the
     /// recovered `i64` counters are guarded by an explicit non-negative
     /// check just above; the `expect` is a defensive belt-and-braces.
-    pub fn load_sidecar(&self, info_hash: &[u8; 20]) -> Result<Option<StatsSnapshot>, StatsSinkError> {
+    pub fn load_sidecar(
+        &self,
+        info_hash: &[u8; 20],
+    ) -> Result<Option<StatsSnapshot>, StatsSinkError> {
         let path = self.sidecar_path(info_hash);
         let bytes = match fs::read(&path) {
             Ok(b) => b,
@@ -295,8 +298,18 @@ mod tests {
         let dir = tempdir().unwrap();
         let sink = FileStatsSink::new(dir.path()).unwrap();
         let hash = [0x11u8; 20];
-        sink.enqueue(StatsSnapshot { info_hash: hash, uploaded: 1, downloaded: 1 }).unwrap();
-        sink.enqueue(StatsSnapshot { info_hash: hash, uploaded: 100, downloaded: 200 }).unwrap();
+        sink.enqueue(StatsSnapshot {
+            info_hash: hash,
+            uploaded: 1,
+            downloaded: 1,
+        })
+        .unwrap();
+        sink.enqueue(StatsSnapshot {
+            info_hash: hash,
+            uploaded: 100,
+            downloaded: 200,
+        })
+        .unwrap();
         sink.flush_now().unwrap();
         let bytes = fs::read(sink.sidecar_path(&hash)).unwrap();
         assert!(bytes.windows(3).any(|w| w == b"100"));
@@ -315,6 +328,7 @@ mod tests {
         .unwrap();
         // Shouldn't hang even with a short timeout; local tempdir write is
         // fast enough in practice.
-        sink.flush_graceful(std::time::Duration::from_secs(1)).unwrap();
+        sink.flush_graceful(std::time::Duration::from_secs(1))
+            .unwrap();
     }
 }

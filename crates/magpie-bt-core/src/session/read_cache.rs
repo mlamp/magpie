@@ -275,7 +275,12 @@ impl ReadCache {
     ) -> Result<Bytes, DiskError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         if disk_tx
-            .send(DiskOp::Read { piece, offset, length, reply_tx })
+            .send(DiskOp::Read {
+                piece,
+                offset,
+                length,
+                reply_tx,
+            })
             .await
             .is_err()
         {
@@ -321,7 +326,13 @@ impl Inner {
         }
         let tick = self.bump_tick();
         self.total_bytes += size;
-        self.entries.insert(key, CacheEntry { bytes, last_access: tick });
+        self.entries.insert(
+            key,
+            CacheEntry {
+                bytes,
+                last_access: tick,
+            },
+        );
     }
 }
 
@@ -394,11 +405,16 @@ mod tests {
         // `misses` to be 1 or more only if somehow another was issued (which
         // would indicate a bug).
         assert_eq!(s.misses, 1, "singleflight must coalesce concurrent misses");
-        assert!(s.singleflight_joins >= 1, "at least one waiter should have joined");
+        assert!(
+            s.singleflight_joins >= 1,
+            "at least one waiter should have joined"
+        );
         // DiskMetrics: no verify-and-write happens here, but io_failures
         // must be 0.
         assert_eq!(
-            metrics.io_failures.load(std::sync::atomic::Ordering::Relaxed),
+            metrics
+                .io_failures
+                .load(std::sync::atomic::Ordering::Relaxed),
             0,
         );
     }
@@ -429,13 +445,25 @@ mod tests {
         let key = |p: u32| ([0u8; 20], p);
         // Fill.
         cache.get_or_load(key(0), 0, 1024, &disk_tx).await.unwrap();
-        cache.get_or_load(key(1), 1024, 1024, &disk_tx).await.unwrap();
-        cache.get_or_load(key(2), 2048, 1024, &disk_tx).await.unwrap();
+        cache
+            .get_or_load(key(1), 1024, 1024, &disk_tx)
+            .await
+            .unwrap();
+        cache
+            .get_or_load(key(2), 2048, 1024, &disk_tx)
+            .await
+            .unwrap();
         // Touch piece 0 so piece 1 becomes coldest.
         let _ = cache.probe(key(0)).unwrap();
         // Insert 4th — piece 1 should be evicted.
-        cache.get_or_load(key(3), 3072, 1024, &disk_tx).await.unwrap();
-        assert!(cache.probe(key(0)).is_some(), "touched piece 0 must survive");
+        cache
+            .get_or_load(key(3), 3072, 1024, &disk_tx)
+            .await
+            .unwrap();
+        assert!(
+            cache.probe(key(0)).is_some(),
+            "touched piece 0 must survive"
+        );
         assert!(cache.probe(key(2)).is_some(), "piece 2 must survive");
         assert!(cache.probe(key(3)).is_some(), "piece 3 must survive");
         assert!(cache.probe(key(1)).is_none(), "piece 1 must be evicted");

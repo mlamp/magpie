@@ -120,8 +120,14 @@ mod tests {
             "magpie_disk_piece_verify_fail",
             "magpie_disk_io_failures",
         ] {
-            assert!(text.contains(&format!("# HELP {name}")), "missing HELP for {name}");
-            assert!(text.contains(&format!("# TYPE {name} counter")), "missing TYPE for {name}");
+            assert!(
+                text.contains(&format!("# HELP {name}")),
+                "missing HELP for {name}"
+            );
+            assert!(
+                text.contains(&format!("# TYPE {name} counter")),
+                "missing TYPE for {name}"
+            );
             assert!(
                 text.contains(&format!(r#"{name}{{torrent="torrent42"}}"#)),
                 "missing value line for {name}"

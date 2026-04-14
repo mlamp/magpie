@@ -117,7 +117,10 @@ impl UnchokeSet {
 
     /// Iterator over all slots (regular + optimistic) without allocating.
     pub fn iter(&self) -> impl Iterator<Item = PeerSlot> + '_ {
-        self.regular.iter().copied().chain(self.optimistic.iter().copied())
+        self.regular
+            .iter()
+            .copied()
+            .chain(self.optimistic.iter().copied())
     }
 }
 
@@ -126,12 +129,7 @@ pub trait Unchoker {
     /// Compute the next unchoke set from the peer view. `rotation_counter`
     /// should increase monotonically across calls; it seeds the deterministic
     /// optimistic choice so tests get stable output.
-    fn select(
-        &self,
-        peers: &[PeerView],
-        now: Instant,
-        rotation_counter: u64,
-    ) -> UnchokeSet;
+    fn select(&self, peers: &[PeerView], now: Instant, rotation_counter: u64) -> UnchokeSet;
 
     /// Configuration (for tests + diagnostics).
     fn config(&self) -> &ChokerConfig;
@@ -158,7 +156,13 @@ fn pick_optimistic(
     for _ in 0..n.min(eligible.len()) {
         let total_weight: u64 = remaining
             .iter()
-            .map(|p| if p.is_new { u64::from(new_peer_weight) } else { 1 })
+            .map(|p| {
+                if p.is_new {
+                    u64::from(new_peer_weight)
+                } else {
+                    1
+                }
+            })
             .sum();
         if total_weight == 0 {
             break;
@@ -173,7 +177,11 @@ fn pick_optimistic(
         let mut acc = 0u64;
         let mut chosen_idx = 0usize;
         for (i, p) in remaining.iter().enumerate() {
-            let w = if p.is_new { u64::from(new_peer_weight) } else { 1 };
+            let w = if p.is_new {
+                u64::from(new_peer_weight)
+            } else {
+                1
+            };
             acc += w;
             if acc > target {
                 chosen_idx = i;

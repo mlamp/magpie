@@ -11,8 +11,7 @@ use proptest::prelude::*;
 use tokio_util::codec::{Decoder, Encoder};
 
 fn arb_block_request() -> impl Strategy<Value = BlockRequest> {
-    (any::<u32>(), any::<u32>(), 1u32..=(1 << 17))
-        .prop_map(|(p, o, l)| BlockRequest::new(p, o, l))
+    (any::<u32>(), any::<u32>(), 1u32..=(1 << 17)).prop_map(|(p, o, l)| BlockRequest::new(p, o, l))
 }
 
 fn arb_message() -> impl Strategy<Value = Message> {
@@ -32,10 +31,11 @@ fn arb_message() -> impl Strategy<Value = Message> {
         arb_block_request().prop_map(Message::Request),
         arb_block_request().prop_map(Message::Cancel),
         arb_block_request().prop_map(Message::RejectRequest),
-        payload_bytes.clone().prop_map(|v| Message::Bitfield(Bytes::from(v))),
-        (any::<u32>(), any::<u32>(), block_payload).prop_map(|(p, o, d)| {
-            Message::Piece(Block::new(p, o, Bytes::from(d)))
-        }),
+        payload_bytes
+            .clone()
+            .prop_map(|v| Message::Bitfield(Bytes::from(v))),
+        (any::<u32>(), any::<u32>(), block_payload)
+            .prop_map(|(p, o, d)| { Message::Piece(Block::new(p, o, Bytes::from(d))) }),
         (any::<u8>(), payload_bytes).prop_map(|(id, p)| Message::Extended {
             id,
             payload: Bytes::from(p),
@@ -44,16 +44,13 @@ fn arb_message() -> impl Strategy<Value = Message> {
 }
 
 fn arb_handshake() -> impl Strategy<Value = Handshake> {
-    (
-        any::<[u8; 8]>(),
-        any::<[u8; 20]>(),
-        any::<[u8; 20]>(),
-    )
-        .prop_map(|(reserved, info_hash, peer_id)| Handshake {
+    (any::<[u8; 8]>(), any::<[u8; 20]>(), any::<[u8; 20]>()).prop_map(
+        |(reserved, info_hash, peer_id)| Handshake {
             reserved,
             info_hash,
             peer_id,
-        })
+        },
+    )
 }
 
 proptest! {

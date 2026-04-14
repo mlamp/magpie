@@ -17,8 +17,8 @@
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex as StdMutex;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -512,7 +512,11 @@ impl Engine {
 
     /// Connect to `addr`, perform the BEP 3 handshake, and attach the peer
     /// task to the named torrent.
-    pub async fn add_peer(&self, torrent_id: TorrentId, addr: SocketAddr) -> Result<(), AddPeerError> {
+    pub async fn add_peer(
+        &self,
+        torrent_id: TorrentId,
+        addr: SocketAddr,
+    ) -> Result<(), AddPeerError> {
         let snapshot = self.snapshot(torrent_id).await?;
         if !snapshot.peer_filter.allow(addr) {
             tracing::debug!(%addr, "peer filtered");
@@ -521,11 +525,14 @@ impl Engine {
         tracing::debug!(%addr, "engine: connecting to peer");
         let stream = tokio::time::timeout(DEFAULT_PEER_CONNECT_TIMEOUT, TcpStream::connect(addr))
             .await
-            .map_err(|_| AddPeerError::Connect(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("tcp connect to {addr} timed out"),
-            )))??;
-        self.attach_stream(snapshot, stream, HandshakeRole::Initiator).await
+            .map_err(|_| {
+                AddPeerError::Connect(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("tcp connect to {addr} timed out"),
+                ))
+            })??;
+        self.attach_stream(snapshot, stream, HandshakeRole::Initiator)
+            .await
     }
 
     /// Attach a peer using a caller-supplied stream that hasn't been
@@ -664,7 +671,10 @@ impl Engine {
         cfg: AttachTrackerConfig,
     ) -> Result<(), AddPeerError> {
         let snapshot = self.snapshot(torrent_id).await?;
-        let metrics = self.disk_metrics(torrent_id).await.ok_or(AddPeerError::UnknownTorrent(torrent_id))?;
+        let metrics = self
+            .disk_metrics(torrent_id)
+            .await
+            .ok_or(AddPeerError::UnknownTorrent(torrent_id))?;
         let total_length = {
             let guard = self.torrents.read().await;
             let total = guard.get(&torrent_id).map(|e| e.total_length);
@@ -710,7 +720,9 @@ impl Engine {
                                     && !matches!(e, AddPeerError::Filtered(_))
                                 {
                                     tracing::debug!(%addr, error = %e, "add_peer failed");
-                                    alerts.push(Alert::Error { code: AlertErrorCode::PeerProtocol });
+                                    alerts.push(Alert::Error {
+                                        code: AlertErrorCode::PeerProtocol,
+                                    });
                                 }
                             });
                         }
@@ -719,7 +731,9 @@ impl Engine {
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, "tracker announce failed");
-                        alerts.push(Alert::Error { code: AlertErrorCode::TrackerFailed });
+                        alerts.push(Alert::Error {
+                            code: AlertErrorCode::TrackerFailed,
+                        });
                         tokio::time::sleep(cfg.error_backoff).await;
                     }
                 }
@@ -771,11 +785,11 @@ impl Engine {
         // keyed to it. Caches inside peer tasks continue to work through
         // teardown because they hold their own Arc<TokenBucket>.
         self.shaper.drop_torrent(torrent_id);
-        if delete_files
-            && let Err(err) = entry.storage.delete()
-        {
+        if delete_files && let Err(err) = entry.storage.delete() {
             tracing::warn!(error = %err, ?torrent_id, "remove: storage.delete() failed");
-            self.alerts.push(Alert::Error { code: AlertErrorCode::StorageIo });
+            self.alerts.push(Alert::Error {
+                code: AlertErrorCode::StorageIo,
+            });
         }
         Ok(())
     }
@@ -1029,7 +1043,12 @@ impl Engine {
         Ok(bound)
     }
 
-    async fn handle_inbound(&self, mut stream: TcpStream, peer_addr: SocketAddr, cfg: ListenConfig) {
+    async fn handle_inbound(
+        &self,
+        mut stream: TcpStream,
+        peer_addr: SocketAddr,
+        cfg: ListenConfig,
+    ) {
         // Pre-handshake peer filter: apply the inbound-global filter before we
         // spend any cycles on the handshake. This blocks SSRF attempts that
         // come from a configured inbound source (e.g. 127.0.0.1 listener with

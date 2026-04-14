@@ -120,7 +120,10 @@ impl DiskWriter {
     ///
     /// The caller is responsible for `tokio::spawn`-ing [`Self::run`].
     #[must_use]
-    pub fn new(storage: Arc<dyn Storage>, queue_capacity: usize) -> (Self, mpsc::Sender<DiskOp>, Arc<DiskMetrics>) {
+    pub fn new(
+        storage: Arc<dyn Storage>,
+        queue_capacity: usize,
+    ) -> (Self, mpsc::Sender<DiskOp>, Arc<DiskMetrics>) {
         let (tx, rx) = mpsc::channel(queue_capacity);
         let metrics = Arc::new(DiskMetrics::default());
         let writer = Self {
@@ -152,14 +155,17 @@ impl DiskWriter {
                     let storage = Arc::clone(&self.storage);
                     let metrics = Arc::clone(&self.metrics);
                     let buffer_len = buffer.len() as u64;
-                    let result =
-                        tokio::task::spawn_blocking(move || verify_and_commit(&buffer, expected_hash, &*storage, offset))
-                            .await
-                            .unwrap_or(Err(DiskError::Io));
+                    let result = tokio::task::spawn_blocking(move || {
+                        verify_and_commit(&buffer, expected_hash, &*storage, offset)
+                    })
+                    .await
+                    .unwrap_or(Err(DiskError::Io));
                     match result {
                         Ok(()) => {
                             metrics.pieces_written.fetch_add(1, Ordering::Relaxed);
-                            metrics.bytes_written.fetch_add(buffer_len, Ordering::Relaxed);
+                            metrics
+                                .bytes_written
+                                .fetch_add(buffer_len, Ordering::Relaxed);
                         }
                         Err(DiskError::HashMismatch) => {
                             metrics.piece_verify_fail.fetch_add(1, Ordering::Relaxed);
@@ -171,7 +177,12 @@ impl DiskWriter {
                     // Best-effort: if the session is gone, just drop the completion.
                     let _ = completion_tx.send(DiskCompletion { piece, result });
                 }
-                DiskOp::Read { piece: _, offset, length, reply_tx } => {
+                DiskOp::Read {
+                    piece: _,
+                    offset,
+                    length,
+                    reply_tx,
+                } => {
                     let storage = Arc::clone(&self.storage);
                     let result: Result<Bytes, DiskError> = tokio::task::spawn_blocking(move || {
                         let mut buf = vec![0u8; length as usize];
@@ -204,7 +215,9 @@ fn verify_and_commit(
     if actual != expected {
         return Err(DiskError::HashMismatch);
     }
-    storage.write_block(offset, buffer).map_err(|_| DiskError::Io)
+    storage
+        .write_block(offset, buffer)
+        .map_err(|_| DiskError::Io)
 }
 
 #[cfg(test)]

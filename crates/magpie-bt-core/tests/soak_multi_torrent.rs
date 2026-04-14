@@ -21,8 +21,13 @@
 //! - Continuous-running mode (each cycle currently tears down + re-spins;
 //!   a single long-lived engine pool is the proper end state).
 #![cfg(unix)]
-#![allow(missing_docs, clippy::cast_possible_truncation, clippy::too_many_lines,
-    clippy::unreadable_literal, clippy::manual_assert)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::unreadable_literal,
+    clippy::manual_assert
+)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -100,7 +105,9 @@ async fn run_pair(
     seed_alerts.set_mask(AlertCategory(u32::MAX));
     let seed_engine = Arc::new(Engine::new(Arc::clone(&seed_alerts)));
     let seed_storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new(total));
-    seed_storage.write_block(0, &synth.content).expect("seed write");
+    seed_storage
+        .write_block(0, &synth.content)
+        .expect("seed write");
     let mut seed_req = AddTorrentRequest::new(
         info_hash,
         build_params(piece_count, piece_length, pieces.clone()),
@@ -142,7 +149,10 @@ async fn run_pair(
         },
     );
     leech_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
-    let leech_tid = leech_engine.add_torrent(leech_req).await.expect("leech add");
+    let leech_tid = leech_engine
+        .add_torrent(leech_req)
+        .await
+        .expect("leech add");
     leech_engine
         .add_peer(leech_tid, seed_addr)
         .await
@@ -153,9 +163,7 @@ async fn run_pair(
     let mut completed = 0_usize;
     while completed < piece_count as usize {
         if Instant::now() > deadline {
-            panic!(
-                "soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces"
-            );
+            panic!("soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces");
         }
         let drained = leech_alerts.drain();
         completed += drained
@@ -228,7 +236,10 @@ async fn multi_torrent_soak() {
         for h in handles {
             h.await.expect("pair task panic");
         }
-        eprintln!("[soak] cycle {cycle} complete; elapsed {:?}", deadline.saturating_duration_since(Instant::now()));
+        eprintln!(
+            "[soak] cycle {cycle} complete; elapsed {:?}",
+            deadline.saturating_duration_since(Instant::now())
+        );
     }
     eprintln!("[soak] finished after {cycle} cycle(s) in {duration_secs}s budget");
 }

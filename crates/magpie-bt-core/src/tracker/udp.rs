@@ -63,7 +63,9 @@ pub fn encode_connect(transaction_id: u32) -> [u8; 16] {
 /// transaction-id mismatch.
 pub fn decode_connect(bytes: &[u8], expected_txid: u32) -> Result<u64, TrackerError> {
     if bytes.len() < 16 {
-        return Err(TrackerError::MalformedResponse("connect response < 16 bytes".into()));
+        return Err(TrackerError::MalformedResponse(
+            "connect response < 16 bytes".into(),
+        ));
     }
     let action = u32::from_be_bytes(bytes[0..4].try_into().unwrap_or([0; 4]));
     if action == ACTION_ERROR {
@@ -71,11 +73,15 @@ pub fn decode_connect(bytes: &[u8], expected_txid: u32) -> Result<u64, TrackerEr
         return Err(TrackerError::Failure(msg));
     }
     if action != ACTION_CONNECT {
-        return Err(TrackerError::MalformedResponse(format!("unexpected action {action}")));
+        return Err(TrackerError::MalformedResponse(format!(
+            "unexpected action {action}"
+        )));
     }
     let txid = u32::from_be_bytes(bytes[4..8].try_into().unwrap_or([0; 4]));
     if txid != expected_txid {
-        return Err(TrackerError::MalformedResponse("transaction_id mismatch".into()));
+        return Err(TrackerError::MalformedResponse(
+            "transaction_id mismatch".into(),
+        ));
     }
     let conn_id = u64::from_be_bytes(bytes[8..16].try_into().unwrap_or([0; 8]));
     Ok(conn_id)
@@ -109,7 +115,9 @@ pub fn encode_announce(
     buf[80..84].copy_from_slice(&event.to_be_bytes());
     buf[84..88].copy_from_slice(&[0u8; 4]); // ip=0 → tracker infers
     buf[88..92].copy_from_slice(&key.to_be_bytes());
-    let num_want = req.num_want.map_or(-1i32, |v| v.try_into().unwrap_or(i32::MAX));
+    let num_want = req
+        .num_want
+        .map_or(-1i32, |v| v.try_into().unwrap_or(i32::MAX));
     buf[92..96].copy_from_slice(&num_want.to_be_bytes());
     buf[96..98].copy_from_slice(&req.port.to_be_bytes());
     buf
@@ -122,27 +130,32 @@ pub fn encode_announce(
 ///
 /// [`TrackerError::MalformedResponse`] on length/action/transaction-id mismatch.
 /// [`TrackerError::Failure`] if the tracker replied with `action=3` (error).
-pub fn decode_announce(
-    bytes: &[u8],
-    expected_txid: u32,
-) -> Result<AnnounceResponse, TrackerError> {
+pub fn decode_announce(bytes: &[u8], expected_txid: u32) -> Result<AnnounceResponse, TrackerError> {
     if bytes.len() < 8 {
-        return Err(TrackerError::MalformedResponse("announce response < 8 bytes".into()));
+        return Err(TrackerError::MalformedResponse(
+            "announce response < 8 bytes".into(),
+        ));
     }
     let action = u32::from_be_bytes(bytes[0..4].try_into().unwrap_or([0; 4]));
     let txid = u32::from_be_bytes(bytes[4..8].try_into().unwrap_or([0; 4]));
     if txid != expected_txid {
-        return Err(TrackerError::MalformedResponse("transaction_id mismatch".into()));
+        return Err(TrackerError::MalformedResponse(
+            "transaction_id mismatch".into(),
+        ));
     }
     if action == ACTION_ERROR {
         let msg = String::from_utf8_lossy(&bytes[8..]).into_owned();
         return Err(TrackerError::Failure(msg));
     }
     if action != ACTION_ANNOUNCE {
-        return Err(TrackerError::MalformedResponse(format!("unexpected action {action}")));
+        return Err(TrackerError::MalformedResponse(format!(
+            "unexpected action {action}"
+        )));
     }
     if bytes.len() < 20 {
-        return Err(TrackerError::MalformedResponse("announce response < 20 bytes".into()));
+        return Err(TrackerError::MalformedResponse(
+            "announce response < 20 bytes".into(),
+        ));
     }
     let interval = u32::from_be_bytes(bytes[8..12].try_into().unwrap_or([0; 4]));
     let leechers = u32::from_be_bytes(bytes[12..16].try_into().unwrap_or([0; 4]));
