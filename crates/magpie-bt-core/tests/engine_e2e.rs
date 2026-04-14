@@ -216,7 +216,7 @@ impl Tracker for MockTracker {
         let peers = self.peers.clone();
         Box::pin(async move {
             Ok(AnnounceResponse {
-                interval: Duration::from_secs(60),
+                interval: Duration::from_secs(2),
                 min_interval: None,
                 peers,
                 tracker_id: None,
@@ -272,17 +272,26 @@ async fn engine_attach_tracker_drives_announce_loop_and_filters_peers() {
 
     // 60 s budget — generous for shared CI runners under coverage.
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let mut total_completed = 0usize;
+    let mut all_alerts_seen: Vec<String> = Vec::new();
     loop {
         let drained = alerts.drain();
-        let completed = drained
-            .iter()
-            .filter(|a| matches!(a, Alert::PieceCompleted { .. }))
-            .count();
-        if completed >= PIECE_COUNT as usize {
+        for a in &drained {
+            all_alerts_seen.push(format!("{a:?}"));
+            if matches!(a, Alert::PieceCompleted { .. }) {
+                total_completed += 1;
+            }
+        }
+        if total_completed >= PIECE_COUNT as usize {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("attach_tracker did not drive completion in 60s; saw {drained:?}");
+            panic!(
+                "attach_tracker did not drive completion in 60s; completed {total_completed}/{PIECE_COUNT}; \
+                 all alerts seen ({}):\n{}",
+                all_alerts_seen.len(),
+                all_alerts_seen.join("\n")
+            );
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
