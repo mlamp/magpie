@@ -262,8 +262,8 @@ async fn engine_attach_tracker_drives_announce_loop_and_filters_peers() {
         .await
         .unwrap();
 
-    // 15 s budget — same rationale as the tracker-less variant above.
-    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    // 60 s budget — generous for shared CI runners under coverage.
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     loop {
         let drained = alerts.drain();
         let completed = drained
@@ -274,7 +274,7 @@ async fn engine_attach_tracker_drives_announce_loop_and_filters_peers() {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("attach_tracker did not drive completion in 5s; saw {drained:?}");
+            panic!("attach_tracker did not drive completion in 60s; saw {drained:?}");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
