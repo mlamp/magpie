@@ -1,0 +1,13 @@
+# cargo-release configuration.
+# Usage: cargo release 0.1.0 --execute
+
+[workspace]
+allow-branch = ["main"]
+sign-tag = false
+push = true
+publish = true
+tag-prefix = "v"
+tag-name = "{{prefix}}{{version}}"
+dependent-version = "upgrade"
+consolidate-commits = true
+pre-release-commit-message = "release: v{{version}}"
