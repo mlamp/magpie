@@ -12,9 +12,19 @@ keywords = ["bittorrent", "metainfo", "torrent"]
 categories = ["parser-implementations", "network-programming"]
 readme = "README.md"
 
+[features]
+# Semver-exempt. Enables `crate::test_support`, a deterministic synthetic
+# torrent generator for integration tests, soak harnesses, and interop
+# fixtures. The module and its API may change in any release without a
+# major version bump. Use it only from tests and CI; never from production
+# code. See `src/test_support.rs` for the stability banner.
+test-support = []
+
 [dependencies]
 magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
 thiserror.workspace = true
+sha1.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

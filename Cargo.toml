@@ -35,7 +35,17 @@ missing_errors_doc = "allow"
 [workspace.dependencies]
 thiserror = "2"
 tokio = { version = "1", default-features = false }
+tokio-util = { version = "0.7", default-features = false, features = ["codec"] }
+bytes = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 tracing = "0.1"
+sha1 = { version = "0.10", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+getrandom = "0.3"
+# Heap profiler for the seeder example + weekly-soak dhat run. Opt-in via
+# magpie-bt's `dhat-heap` feature; default builds never pull this in.
+dhat = "0.3"
 
 # Dev-dependencies shared across crates
 cucumber = "0.21"

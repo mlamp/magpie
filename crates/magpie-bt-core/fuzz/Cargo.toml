@@ -1,0 +1,29 @@
+[package]
+name = "magpie-bt-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+magpie-bt-core = { path = ".." }
+
+[[bin]]
+name = "alert_ring"
+path = "fuzz_targets/alert_ring.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "udp_tracker"
+path = "fuzz_targets/udp_tracker.rs"
+test = false
+doc = false
+bench = false
+
+# Exclude from workspace — cargo-fuzz has its own target dir.
+[workspace]

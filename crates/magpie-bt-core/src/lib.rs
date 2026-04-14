@@ -1,19 +1,21 @@
-//! Engine core for magpie — piece picker, storage trait, alert ring,
-//! session orchestration.
+//! Engine core for magpie — piece picker, storage trait, alert ring, peer-id
+//! builder, tracker client, and (from M1 phase 3) session orchestration.
 //!
 //! `unsafe` is restricted to documented syscall wrappers (see
 //! [`docs/DISCIPLINES.md`][disc]). Every `unsafe` block must carry a
 //! `// SAFETY:` comment.
 //!
-//! Pre-M0 placeholder. Real implementation lands during the M0 milestone
-//! (see `docs/milestones/001-foundations.md`).
-//!
 //! [disc]: https://github.com/mlamp/magpie/blob/main/docs/DISCIPLINES.md
 #![deny(unsafe_code)]
 #![doc = include_str!("../README.md")]
 
-#[cfg(test)]
-mod smoke {
-    #[test]
-    fn smoke() {}
-}
+pub mod alerts;
+pub mod engine;
+#[cfg(feature = "prometheus")]
+pub mod metrics_exporter;
+pub mod peer_filter;
+pub mod peer_id;
+pub mod picker;
+pub mod session;
+pub mod storage;
+pub mod tracker;

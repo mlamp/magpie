@@ -1,12 +1,14 @@
 #![no_main]
-//! Fuzz target: bencode decode must not panic on any input.
-//!
-//! Real invariants (decode → encode round-trip, bounded allocations) land
-//! with the decoder during M0. Stub body asserts no panic.
+//! Fuzz target: `bencode::decode` must never panic and must never allocate
+//! more than the input size implies. If decoding succeeds, re-encoding the
+//! value must produce bytes that decode back to the same tree.
 use libfuzzer_sys::fuzz_target;
+use magpie_bt_bencode::{decode, encode};
 
 fuzz_target!(|data: &[u8]| {
-    // TODO(M0): call magpie_bt_bencode::decode(data) when the decoder lands.
-    // For now, touch the slice so the fuzzer sees coverage on this code path.
-    let _ = data.len();
+    if let Ok(value) = decode(data) {
+        let reencoded = encode(&value);
+        let reparsed = decode(&reencoded).expect("canonical re-encode must decode");
+        assert_eq!(reparsed.into_owned(), value.into_owned());
+    }
 });

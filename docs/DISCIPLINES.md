@@ -48,7 +48,7 @@ The bars every change must clear. Scan in ≤2 minutes. Anything that isn't enfo
 - **ADRs** (`docs/adr/NNNN-title.md`, Michael Nygard format) for non-trivial design decisions. Index in `docs/adr/README.md`. An ADR is required before introducing `unsafe`, adding a dependency with a non-standard license, or taking a hard runtime/ecosystem commitment.
 - **CHANGELOG.md** updated on every PR that affects public API, behaviour, or MSRV.
 - **Milestone files** are the source of truth for in-flight scope. New milestones use `docs/milestones/_template.md`.
-- **Public API shape is driven by lightorrent's call sites first.** If lightorrent needs to reach into internals, that is an API bug in magpie.
+- **Public API is client-agnostic; lightorrent's call sites are a completeness check, not the shape driver.** If a realistic BitTorrent client would need to reach into internals, that is an API bug in magpie.
 
 ## Security
 

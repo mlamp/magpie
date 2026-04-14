@@ -1,0 +1,29 @@
+# Dockerfile.magpie — interop harness image with three magpie binaries.
+#
+# Stage 1 builds the workspace with `test-support` enabled so
+# `generate_fixture` is available. Stage 2 is a minimal runtime with
+# just the three example binaries.
+#
+# Built by: ci/interop/run.sh
+# Used by: ci/interop/docker-compose.qbittorrent.yml, transmission.yml
+
+FROM rust:1.94-slim AS build
+WORKDIR /src
+# Copy workspace manifest + crates. This is deliberate (`.dockerignore`
+# excludes target/ and .git/) so the build layer caches on Cargo.toml
+# changes only.
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo build --release --features test-support \
+        --example seeder \
+        --example mock_tracker \
+        --example generate_fixture
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates netcat-openbsd \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=build /src/target/release/examples/seeder /usr/local/bin/magpie-seeder
+COPY --from=build /src/target/release/examples/mock_tracker /usr/local/bin/mock_tracker
+COPY --from=build /src/target/release/examples/generate_fixture /usr/local/bin/generate_fixture
+# Consumers override CMD per role; no default service.

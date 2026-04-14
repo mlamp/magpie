@@ -1,0 +1,68 @@
+name: Weekly soak
+
+# M2 gate criterion 3: 24h ≥8-torrent soak with a ≥100k-piece synthetic
+# torrent, dhat-flat memory profile, RSS within documented budget.
+#
+# Runs Sunday 01:17 UTC so it doesn't collide with `nightly.yml` (03:17).
+# `workflow_dispatch` allows ad-hoc invocation with shorter overrides.
+
+on:
+  schedule:
+    - cron: "17 1 * * 0"
+  workflow_dispatch:
+    inputs:
+      duration_secs:
+        description: "Override SOAK_DURATION_SECS (default 24h)"
+        required: false
+        default: "86400"
+      pairs:
+        description: "Override SOAK_PAIRS (default 8)"
+        required: false
+        default: "8"
+      large_piece_count:
+        description: "Override SOAK_LARGE_PIECE_COUNT (default 100000)"
+        required: false
+        default: "100000"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  multi-torrent:
+    name: Multi-torrent soak (8 pairs, 24h)
+    runs-on: ubuntu-latest
+    # Job timeout = SOAK_DURATION_SECS plus generous build/teardown headroom.
+    # Hardcoded ceiling at ~25h so a hung run can't pin the runner.
+    timeout-minutes: 1500
+    env:
+      SOAK_DURATION_SECS: ${{ github.event.inputs.duration_secs || '86400' }}
+      SOAK_PAIRS: ${{ github.event.inputs.pairs || '8' }}
+      SOAK_LARGE_PIECE_COUNT: ${{ github.event.inputs.large_piece_count || '100000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run soak harness
+        run: ./ci/soak/multi-torrent.sh
+      - name: Capture cargo target dir size on failure
+        if: failure()
+        run: du -sh target/release || true
+
+  dhat:
+    name: dhat heap profile (24h)
+    runs-on: ubuntu-latest
+    timeout-minutes: 1500
+    # dhat-instrumented soak example is wired; failures are real signals.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run dhat soak
+        run: ./ci/soak/dhat.sh
+      - name: Upload dhat-heap.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dhat-heap
+          path: dhat-heap.json
+          if-no-files-found: ignore

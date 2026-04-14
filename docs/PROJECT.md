@@ -4,7 +4,7 @@ Stable *why/what* for the project. For sequencing and status see [ROADMAP.md](RO
 
 - **Repo**: `github.com/mlamp/magpie`
 - **Crate prefix**: `magpie-bt-*` on crates.io (bare `magpie` is taken by an unrelated Othello library)
-- **Consumer dogfood**: [lightorrent](../../lightorrent) — drives API shape from day one.
+- **Reference consumer**: [lightorrent](../../lightorrent) — used as a design sanity check for API completeness ("does magpie cover real call sites?"). Not a milestone gate: consumer adoption happens in that repo, on its timeline. magpie is a general-purpose library.
 
 ## Motivation
 
@@ -34,7 +34,7 @@ The detailed gap analysis against librqbit 8 that originally justified this proj
 
 Rationale: BEP 52 has been final since 2020 but adoption in the wild is negligible — public and private trackers, *arr workflows, and existing .torrent files are overwhelmingly v1. A v2-only client can't meaningfully participate in existing swarms. v2 is additive to v1, not a replacement, so writing v1 is ~90% of writing v2. Abstract the hash layer early (`PieceHash::{V1, V2}`), enforce v2 block/piece-size invariants (16 KiB blocks, power-of-two piece sizes) even in v1, and v2/hybrid slots in without a rewrite.
 
-**Day-one BEPs** (by end of M2): 3, 6, 9/10, 12, 15, 23, 27, 29.
+**Day-one BEPs** (by end of M4): 3, 6, 9/10, 12, 15, 23, 27, 29. Per-milestone split: BEPs 3, 6, 23 land in M1; 12, 15, 27 in M2; 9/10 in M3 (magnet + extension protocol); 29 in M4 (uTP).
 **Later**: 5 (DHT), 11 (PEX), 14 (LSD), 52 (v2/hybrid), 19 (WebSeed), 48 (scrape).
 
 ## Architecture principles
@@ -47,7 +47,7 @@ Rationale: BEP 52 has been final since 2020 but adoption in the wild is negligib
 - **Feature flags for optional protocols** (`dht`, `utp`, `v2`, `webseed`) so small builds stay small.
 - **No allocations in the piece/request hot loop.** Preallocate request queues, reuse block buffers.
 - **Typed errors per module** (`thiserror`). No `Box<dyn Error>` in hot paths.
-- **Public API designed from lightorrent's call sites first.** If lightorrent needs to reach into internals, that's an API bug in magpie.
+- **Public API is client-agnostic; lightorrent's call sites are a completeness check, not the shape driver.** If a realistic BitTorrent client would need to reach into internals, that's an API bug in magpie.
 
 ## Crate layout
 

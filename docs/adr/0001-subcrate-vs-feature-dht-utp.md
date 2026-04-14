@@ -1,8 +1,17 @@
 # 0001 — Subcrate vs. feature for DHT and uTP
 
-- **Status**: accepted
+- **Status**: accepted; reconfirmed at M0 close (2026-04-13)
 - **Date**: 2026-04-13
 - **Deciders**: TBD (resolve before M3 kickoff)
+
+## M0-close reconfirmation
+
+Reviewed at M0 gate. The five-crate workspace (`magpie-bt-bencode`,
+`magpie-bt-metainfo`, `magpie-bt-wire`, `magpie-bt-core`, `magpie-bt`) has
+landed cleanly without friction across three phases of implementation. No
+signal emerged that a single-crate alternative would have been simpler.
+Decision stands: `magpie-bt-dht` (M3) and `magpie-bt-utp` (M4) will land as
+new workspace members behind `-core` feature flags.
 
 ## Context
 

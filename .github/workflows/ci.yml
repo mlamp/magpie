@@ -107,7 +107,7 @@ jobs:
       - name: Enforce thresholds
         # Thresholds per docs/DISCIPLINES.md target ≥85% overall.
         # Temporarily lowered to 0 during pre-M0 while crates are empty
-        # scaffolds; re-raise to 85 at M0 gate (see 001-foundations.md).
+        # scaffolds; re-raise to 85 at M0 gate (see 000-foundations.md).
         run: cargo llvm-cov report --fail-under-lines 0
       - uses: actions/upload-artifact@v4
         with:

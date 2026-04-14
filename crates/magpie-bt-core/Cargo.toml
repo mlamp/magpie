@@ -12,18 +12,43 @@ keywords = ["bittorrent", "engine", "torrent"]
 categories = ["network-programming", "asynchronous"]
 readme = "README.md"
 
+[features]
+# Optional Prometheus text-format exporter for `DiskMetrics` and (later)
+# choker / shaper counters. Pure stdlib — no `prometheus` crate dep — so
+# enabling the feature adds no transitive build cost. Consumers wire the
+# rendered text into their own HTTP scrape endpoint.
+prometheus = []
+# dhat heap-profiling allocator for the soak example. Dev-only; never
+# enabled in library builds.
+dhat-heap = ["dep:dhat", "dep:libc", "magpie-bt-metainfo/test-support"]
+
 [dependencies]
 magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
 magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.0.1" }
 magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.0.1" }
+bytes.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync", "rt", "io-util", "time", "macros"] }
+tokio = { workspace = true, features = ["sync", "rt", "io-util", "time", "macros", "net"] }
+tokio-util.workspace = true
 tracing.workspace = true
+getrandom.workspace = true
+
+dhat = { workspace = true, optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
 criterion.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
+# Synthetic torrent generator for the controlled-swarm gate test.
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.0.1", features = ["test-support"] }
+
+[[example]]
+name = "dhat_soak"
+required-features = ["dhat-heap"]
 
 [[bench]]
 name = "picker"

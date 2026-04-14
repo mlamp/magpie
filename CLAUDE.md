@@ -1,8 +1,8 @@
 # magpie — guide for AI assistants
 
-`magpie` is a greenfield Rust BitTorrent library. Consumer of record: [lightorrent](../lightorrent). The public API is designed from lightorrent's call sites first. For the full *why*, read [docs/PROJECT.md](docs/PROJECT.md).
+`magpie` is a greenfield, general-purpose Rust BitTorrent library. [lightorrent](../lightorrent) is the current reference consumer used as a design sanity check for API completeness — not a milestone gate or API-shape driver. For the full *why*, read [docs/PROJECT.md](docs/PROJECT.md).
 
-Current status: **pre-M0**, docs-only. No Cargo workspace yet. The workspace is initialised when M0 starts.
+Current status: **M2 in-progress** (seeder + multi-torrent — consumer-integration ready). Cargo workspace exists; A/A2/B/C/D/E/G largely implemented, remaining work is observability tail, interop, verification gates, and consumer-surface audit. See `docs/MILESTONES.md`.
 
 ## File map
 

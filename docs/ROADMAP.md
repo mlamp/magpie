@@ -1,8 +1,8 @@
 # magpie — Roadmap
 
-Sequenced phases from "no code" to "replace librqbit in lightorrent". For *why* each phase exists, see [PROJECT.md](PROJECT.md). For current status and per-milestone detail, see [MILESTONES.md](MILESTONES.md).
+Sequenced phases from "no code" to "production-grade general-purpose BitTorrent library". For *why* each phase exists, see [PROJECT.md](PROJECT.md). For current status and per-milestone detail, see [MILESTONES.md](MILESTONES.md).
 
-Each milestone is end-to-end shippable. Lightorrent dogfoods from **M2** behind `--engine=magpie`; librqbit stays default until **M5**.
+Each milestone is end-to-end shippable on magpie's own artifacts. magpie is a general-purpose library: consumer integrations (lightorrent is the current reference consumer) happen in those repos, on their timelines, and are **not** milestone gates here.
 
 ## Phases
 
@@ -14,9 +14,9 @@ Crate skeleton + workspace. Bencode encode/decode (zero-copy where possible). Me
 HTTP tracker announce (BEP 3, compact BEP 23). Peer wire: handshake, bitfield, have, request/piece/cancel, choke/unchoke, interested. BEP 6 Fast extension. Download one torrent end-to-end; all hashes verify. Tracing + optional Prometheus metrics.
 **Gate**: fetch Ubuntu ISO from public trackers, no leaks under `dhat`.
 
-### M2 — Seeder + multi-torrent + lightorrent dogfood
-Upload side; choking algorithm (tit-for-tat + optimistic unchoke). Multi-torrent engine, shared bandwidth limits. Persistent stats (event-driven, no polling) — replaces the poll loop. UDP tracker (BEP 15). Multi-tracker (BEP 12), private flag honoured (BEP 27). Lightorrent `--engine=magpie` flag; CI runs both engines side-by-side.
-**Gate**: lightorrent's existing test suite passes on magpie; ratio enforcement works; stats persist across restart.
+### M2 — Seeder + multi-torrent (consumer-integration ready)
+Upload side; choking algorithm (tit-for-tat + optimistic unchoke). Multi-torrent engine, shared bandwidth limits. Persistent stats (event-driven, no polling). UDP tracker (BEP 15). Multi-tracker (BEP 12), private flag honoured (BEP 27). Public API surface audited against realistic client call-site patterns (client-agnostic). Interop verified in CI against qBittorrent + Transmission via local tracker + synthetic fixtures.
+**Gate**: controlled-swarm reseed (magpie-only, synthetic ~5 MiB, SHA-256 match); 24 h ≥8-torrent soak incl. ≥100k-piece torrent; stats persist across restart (subprocess test); interop scenarios green both directions.
 
 ### M3 — Magnet + DHT
 BEP 9/10 extension protocol + `ut_metadata` → magnet support. BEP 5 Kademlia DHT (study anacrolix's `dht`). BEP 11 PEX, BEP 14 LSD.
@@ -26,9 +26,9 @@ BEP 9/10 extension protocol + `ut_metadata` → magnet support. BEP 5 Kademlia D
 Userspace uTP (design our own after reading rakshasa, rasterbar, librqbit-utp). Full BEP 52: merkle hash verification, hybrid bi-mode, merkle layer fetch from peers.
 **Gate**: download a hybrid torrent via uTP, v2 hashes verify, reseed it.
 
-### M5 — Parity + replace librqbit
-WebSeed (BEP 19), tracker scrape (BEP 48). UPnP/NAT-PMP (optional subcrate). Piece picker upgrade: rasterbar-style speed-class affinity. Remove librqbit from lightorrent.
-**Gate**: 30-day soak on lightorrent prod with magpie only. Memory steady, no hash failures.
+### M5 — Parity + client-replacement readiness
+WebSeed (BEP 19), tracker scrape (BEP 48). UPnP/NAT-PMP (optional subcrate). Piece picker upgrade: rasterbar-style speed-class affinity. Capability bar: magpie is ready to fully replace librqbit in a production client (lightorrent is the current reference consumer — cutover happens on lightorrent's timeline, not magpie's).
+**Gate**: 30-day production-grade soak demonstrated via a real consumer deployment. Memory steady, no hash failures.
 
 ### M6+ — Polish
 Streaming (sequential/priority pieces). Super-seeding. SSL torrents. Pluggable storage: mmap, sqlite, S3.

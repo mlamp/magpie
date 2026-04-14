@@ -12,15 +12,49 @@ keywords = ["bittorrent", "p2p", "torrent"]
 categories = ["network-programming"]
 readme = "README.md"
 
+[features]
+# Opt-in heap profiler for the `seeder` example. Enables dhat's global
+# allocator — default builds of magpie-bt are unaffected. Used by
+# `ci/soak/dhat.sh` to capture a `dhat-heap.json` artifact over a 24h
+# soak run.
+dhat-heap = ["dep:dhat"]
+# Re-exports the synthetic torrent generator from magpie-bt-metainfo's
+# `test-support` feature, for the `generate_fixture` interop example
+# and consumer test harnesses. Semver-exempt — see metainfo's README.
+test-support = ["magpie-bt-metainfo/test-support"]
+
 [dependencies]
 magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+magpie-bt-core = { path = "../magpie-bt-core", version = "0.0.1" }
 magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.0.1" }
 magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.0.1" }
-magpie-bt-core = { path = "../magpie-bt-core", version = "0.0.1" }
+# Optional: heap profiling for the seeder example. Gated by the
+# `dhat-heap` feature so default builds have zero overhead.
+dhat = { workspace = true, optional = true }
 
 [dev-dependencies]
+bytes.workspace = true
 cucumber.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time"] }
+tokio-util.workspace = true
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "env-filter"] }
+
+[[example]]
+name = "leech"
+path = "examples/leech.rs"
+
+[[example]]
+name = "seeder"
+path = "examples/seeder.rs"
+
+[[example]]
+name = "mock_tracker"
+path = "examples/mock_tracker.rs"
+
+[[example]]
+name = "generate_fixture"
+path = "examples/generate_fixture.rs"
+required-features = ["test-support"]
 
 [[test]]
 name = "cucumber"

@@ -1,0 +1,42 @@
+name: Interop
+
+# M2 gate criterion 5. Runs magpie vs qBittorrent and magpie vs
+# Transmission interop scenarios from `ci/interop/` on each PR. SHA-256
+# match of a synthetic ~5 MiB fixture is the hard gate.
+#
+# Scheduled daily in addition to PR-triggered so regressions in
+# third-party image updates surface within 24h.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  interop:
+    name: ${{ matrix.scenario }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [qbittorrent, transmission]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq + base64 + sha256sum
+        run: sudo apt-get update && sudo apt-get install -y jq coreutils
+      - name: Run interop scenario
+        run: ci/interop/run.sh ${{ matrix.scenario }}
+      - name: Upload stack logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interop-${{ matrix.scenario }}-logs
+          path: /tmp/interop-${{ matrix.scenario }}.log
+          if-no-files-found: ignore

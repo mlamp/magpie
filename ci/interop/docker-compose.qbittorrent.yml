@@ -1,0 +1,110 @@
+# Interop scenario: magpie seeds → qBittorrent leech.
+# Harness boots in four services on a private bridge network:
+#
+#   fixture  one-shot — generates fixture.bin + fixture.torrent.with-announce
+#   tracker  mock HTTP tracker on :6969, returns magpie's IP:port
+#   seeder   magpie-seeder serving fixture.bin on :6881
+#   leech    qBittorrent-nox reading fixture.torrent.with-announce
+#
+# The leech exits when the download SHA-256 matches (via sha256sum in
+# its entrypoint wrapper). `run.sh` gates the whole scenario on leech
+# exit-0.
+#
+# Pin image digests explicitly so a future qBittorrent release can't
+# silently flip the interop signal. Replace DIGEST placeholders during
+# first successful run.
+
+services:
+  fixture:
+    build:
+      context: ../..
+      dockerfile: ci/interop/Dockerfile.magpie
+    image: magpie-interop:latest
+    command: generate_fixture
+    environment:
+      FIXTURE_OUT_DIR: /shared
+      FIXTURE_ANNOUNCE: http://tracker:6969/announce
+      FIXTURE_NAME: interop.bin
+      FIXTURE_PIECE_COUNT: 320   # ~5 MiB @ 16 KiB pieces
+    volumes:
+      - shared:/shared
+
+  tracker:
+    image: magpie-interop:latest
+    depends_on:
+      fixture:
+        condition: service_completed_successfully
+    command: mock_tracker
+    environment:
+      MOCK_TRACKER_PORT: "6969"
+      # Tells qBittorrent where magpie-seeder is listening. Compose
+      # service DNS resolves `seeder` to the bridge IP; qBittorrent
+      # expects an IP in the compact list, so the mock tracker will
+      # accept an IP:port literal via env.
+      MOCK_TRACKER_PEERS: "${SEEDER_IP:-10.88.0.10}:6881"
+    networks:
+      default:
+        ipv4_address: 10.88.0.20
+    expose:
+      - "6969"
+
+  seeder:
+    image: magpie-interop:latest
+    depends_on:
+      fixture:
+        condition: service_completed_successfully
+    command:
+      - magpie-seeder
+      - --torrent
+      - /shared/fixture.torrent
+      - --data
+      - /shared/interop.bin
+      - --listen
+      - 0.0.0.0:6881
+      - --stats-dir
+      - /shared/stats
+      - --flush-secs
+      - "2"
+    volumes:
+      - shared:/shared
+    networks:
+      default:
+        ipv4_address: 10.88.0.10
+    expose:
+      - "6881"
+
+  leech:
+    image: linuxserver/qbittorrent:5.0.4
+    depends_on:
+      tracker:
+        condition: service_started
+      seeder:
+        condition: service_started
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      WEBUI_PORT: "8080"
+    volumes:
+      - shared:/shared:ro
+      - ./qbittorrent-config:/config
+      - leech-downloads:/downloads
+    # Publish webUI port so `gate_qbittorrent.sh` on the host can
+    # drive the add-torrent + completion-poll flow.
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Actual add-torrent + SHA-256 gate is driven by run.sh via the
+    # qBittorrent webUI API. Service just needs to be running.
+    networks:
+      default:
+        ipv4_address: 10.88.0.30
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.88.0.0/24
+
+volumes:
+  shared:
+  leech-downloads:

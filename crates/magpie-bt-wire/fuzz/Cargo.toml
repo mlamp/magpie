@@ -1,0 +1,31 @@
+[package]
+name = "magpie-bt-wire-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bytes = "1"
+tokio-util = { version = "0.7", default-features = false, features = ["codec"] }
+magpie-bt-wire = { path = ".." }
+
+[[bin]]
+name = "wire_decode"
+path = "fuzz_targets/wire_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "handshake_decode"
+path = "fuzz_targets/handshake_decode.rs"
+test = false
+doc = false
+bench = false
+
+# Exclude from workspace — cargo-fuzz has its own target dir.
+[workspace]
