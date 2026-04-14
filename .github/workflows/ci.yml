@@ -68,6 +68,28 @@ jobs:
       - run: cargo test --workspace --all-features --no-fail-fast
         env:
           RUST_TEST_THREADS: "1"
+          RUST_LOG: "magpie_bt_core=debug"
+
+  test-debian:
+    name: test (debian-trixie)
+    needs: preflight
+    if: needs.preflight.outputs.has_workspace == 'true'
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential pkg-config libssl-dev git
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - run: cargo test --workspace --all-features --no-fail-fast
+        env:
+          RUST_TEST_THREADS: "1"
+          RUST_LOG: "magpie_bt_core=debug"
 
   doc:
     name: rustdoc
@@ -108,6 +130,7 @@ jobs:
         run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
         env:
           RUST_TEST_THREADS: "1"
+          RUST_LOG: "magpie_bt_core=debug"
       - name: Enforce thresholds
         # Thresholds per docs/DISCIPLINES.md target ≥85% overall.
         # Temporarily lowered to 0 during pre-M0 while crates are empty
