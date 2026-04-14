@@ -160,18 +160,26 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
     // coverage instrumentation + `--all-features` on shared CI runners
     // the budget must be very generous to avoid flakes.
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let mut total_completed = 0usize;
+    let mut all_alerts_seen: Vec<String> = Vec::new();
     loop {
         let drained = alerts.drain();
-        if drained
-            .iter()
-            .filter(|a| matches!(a, Alert::PieceCompleted { .. }))
-            .count()
-            >= PIECE_COUNT as usize
-        {
+        for a in &drained {
+            all_alerts_seen.push(format!("{a:?}"));
+            if matches!(a, Alert::PieceCompleted { .. }) {
+                total_completed += 1;
+            }
+        }
+        if total_completed >= PIECE_COUNT as usize {
             break;
         }
         if std::time::Instant::now() > deadline {
-            panic!("did not complete within 60s; alerts seen: {drained:?}");
+            panic!(
+                "did not complete within 60s; completed {total_completed}/{PIECE_COUNT}; \
+                 all alerts seen ({}):\n{}",
+                all_alerts_seen.len(),
+                all_alerts_seen.join("\n")
+            );
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
