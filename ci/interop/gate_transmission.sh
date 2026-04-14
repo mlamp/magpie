@@ -41,19 +41,27 @@ tm_rpc() {
   local attempt
   for attempt in 1 2 3; do
     local http_code
-    http_code=$(curl -sS -w '%{http_code}' -o /tmp/tm_rpc_out.json \
-      $AUTH -H "X-Transmission-Session-Id: $sid" \
-      -H "Content-Type: application/json" -d "$body" "$RPC_HOST" 2>/dev/null || true)
+    # -o sends body to file; -w writes ONLY the status code to stdout.
+    http_code=$(curl -sS \
+      -o /tmp/tm_rpc_out.json \
+      -w '%{http_code}' \
+      $AUTH \
+      -H "X-Transmission-Session-Id: $sid" \
+      -H "Content-Type: application/json" \
+      -d "$body" \
+      "$RPC_HOST" 2>/dev/null) || true
+    echo "[tm] RPC attempt $attempt: HTTP $http_code" >&2
     if [ "$http_code" = "409" ]; then
-      echo "[tm] got 409 — refreshing session ID (attempt $attempt)" >&2
+      echo "[tm] refreshing session ID" >&2
       refresh_session_id
+      echo "[tm] new session ID: ${sid:0:8}..." >&2
       continue
     fi
-    if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+    if [ "$http_code" = "200" ]; then
       cat /tmp/tm_rpc_out.json
       return 0
     fi
-    echo "[tm] RPC returned HTTP $http_code (attempt $attempt)" >&2
+    echo "[tm] unexpected HTTP $http_code" >&2
     sleep 1
   done
   echo "[tm] RPC failed after 3 attempts" >&2

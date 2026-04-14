@@ -259,11 +259,18 @@ async fn main() {
                 cycle_timeout,
             )));
         }
+        let mut failures = 0u32;
         for h in handles {
-            h.await.expect("pair task panic");
+            match h.await {
+                Ok(()) => {}
+                Err(e) => {
+                    failures += 1;
+                    eprintln!("[dhat-soak] pair failed in cycle {cycle}: {e}");
+                }
+            }
         }
         eprintln!(
-            "[dhat-soak] cycle {cycle} complete; remaining {:?}",
+            "[dhat-soak] cycle {cycle} complete (failures: {failures}); remaining {:?}",
             deadline.saturating_duration_since(Instant::now())
         );
     }

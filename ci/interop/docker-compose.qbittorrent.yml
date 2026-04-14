@@ -74,7 +74,10 @@ services:
       - "6881"
 
   leech:
-    image: linuxserver/qbittorrent:5.0.4
+    # Pin to 4.6.7 — last version where admin/adminadmin is the default
+    # password without requiring PBKDF2 pre-configuration. 5.0+ generates
+    # a random password on first boot and ignores ha1 configs.
+    image: linuxserver/qbittorrent:4.6.7
     depends_on:
       tracker:
         condition: service_started
@@ -84,9 +87,6 @@ services:
       PUID: "1000"
       PGID: "1000"
       WEBUI_PORT: "8080"
-      # linuxserver/qbittorrent 4.6+ generates a random initial password.
-      # Pin it so gate_qbittorrent.sh can log in deterministically.
-      WEBUI_PASSWORD: "adminadmin"
     volumes:
       - shared:/shared:ro
       - ./qbittorrent-config:/config
