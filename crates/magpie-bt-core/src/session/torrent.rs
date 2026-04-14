@@ -11,6 +11,7 @@ use magpie_bt_wire::{BLOCK_SIZE, BlockRequest};
 use tokio::sync::mpsc;
 
 use crate::alerts::{Alert, AlertErrorCode, AlertQueue};
+use crate::ids::TorrentId;
 use crate::picker::Picker;
 use crate::session::disk::{DiskCompletion, DiskError, DiskOp};
 use crate::session::messages::{PeerSlot, PeerToSession, SessionCommand, SessionToPeer};
@@ -232,6 +233,7 @@ pub enum TorrentState {
 /// [`DiskWriter`](super::disk::DiskWriter) task and updating state when the
 /// matching completion arrives.
 pub struct TorrentSession {
+    torrent_id: TorrentId,
     params: TorrentParams,
     info_hash: [u8; 20],
     alerts: Arc<AlertQueue>,
@@ -279,6 +281,7 @@ impl TorrentSession {
     /// session-global cache instance shared across all torrents.
     #[must_use]
     pub fn new(
+        torrent_id: TorrentId,
         params: TorrentParams,
         info_hash: [u8; 20],
         alerts: Arc<AlertQueue>,
@@ -292,6 +295,7 @@ impl TorrentSession {
         let (cmd_tx, cmd_rx) = mpsc::channel(SESSION_COMMAND_CAPACITY);
         let picker = Picker::new(params.piece_count);
         let session = Self {
+            torrent_id,
             params,
             info_hash,
             read_cache,
@@ -445,6 +449,7 @@ impl TorrentSession {
                 tracing::debug!(piece = completion.piece, "piece verified and committed");
                 self.picker.mark_have(completion.piece);
                 self.alerts.push(Alert::PieceCompleted {
+                    torrent: self.torrent_id,
                     piece: completion.piece,
                 });
                 for p in self.peers.values() {
@@ -461,6 +466,7 @@ impl TorrentSession {
                     "piece hash mismatch — re-requesting"
                 );
                 self.alerts.push(Alert::Error {
+                    torrent: self.torrent_id,
                     code: AlertErrorCode::HashMismatch,
                 });
                 // Piece marker is gone and picker still sees it as missing,
@@ -468,6 +474,7 @@ impl TorrentSession {
             }
             Err(DiskError::Io) => {
                 self.alerts.push(Alert::Error {
+                    torrent: self.torrent_id,
                     code: AlertErrorCode::StorageIo,
                 });
             }
@@ -489,7 +496,7 @@ impl TorrentSession {
                 // Note: the initial Bitfield advert is sent by
                 // `register_peer_with` to dodge a Connected-before-Register
                 // race. HaveAll/HaveNone fast-ext optimization is a follow-up.
-                self.alerts.push(Alert::PeerConnected { peer: slot.0 });
+                self.alerts.push(Alert::PeerConnected { torrent: self.torrent_id, peer: slot });
             }
             PeerToSession::Disconnected { slot, ref reason } => {
                 tracing::debug!(slot = slot.0, ?reason, "peer disconnected");
@@ -499,7 +506,7 @@ impl TorrentSession {
                     // Release any blocks claimed by this peer.
                     self.release_claims(slot);
                 }
-                self.alerts.push(Alert::PeerDisconnected { peer: slot.0 });
+                self.alerts.push(Alert::PeerDisconnected { torrent: self.torrent_id, peer: slot });
             }
             PeerToSession::Choked { slot } => {
                 if let Some(p) = self.peers.get_mut(&slot) {
@@ -612,7 +619,7 @@ impl TorrentSession {
         }
         self.completion_fired = true;
         // Step 1: emit the transition alert.
-        self.alerts.push(Alert::TorrentComplete);
+        self.alerts.push(Alert::TorrentComplete { torrent: self.torrent_id });
         // Steps 2 + 3: choker swap and immediate re-eval. Choker isn't
         // wired into the actor yet; the hook is documented for the
         // follow-up wiring step.
@@ -778,7 +785,7 @@ impl TorrentSession {
         if let Some(p) = self.peers.get(&slot) {
             let _ = p.tx.send(SessionToPeer::Shutdown);
         }
-        self.alerts.push(Alert::Error { code });
+        self.alerts.push(Alert::Error { torrent: self.torrent_id, code });
     }
 
     fn maybe_express_interest(&mut self, slot: PeerSlot) {
@@ -985,6 +992,7 @@ impl TorrentSession {
             // DiskWriter has gone away — drop the marker and surface I/O error.
             self.in_progress.remove(&piece);
             self.alerts.push(Alert::Error {
+                torrent: self.torrent_id,
                 code: AlertErrorCode::StorageIo,
             });
         }
@@ -1205,6 +1213,7 @@ mod tests {
         let (disk_tx, _disk_rx) = mpsc::channel(4);
         let read_cache = Arc::new(ReadCache::new(0));
         let (session, _cmd_tx) = TorrentSession::new(
+            TorrentId::__test_new(1),
             params,
             [0u8; 20],
             Arc::clone(&alerts),
@@ -1240,7 +1249,7 @@ mod tests {
         // Step 1: exactly one TorrentComplete alert.
         let drained = alerts.drain();
         assert_eq!(drained.len(), 1, "exactly one alert");
-        assert!(matches!(drained[0], Alert::TorrentComplete));
+        assert!(matches!(drained[0], Alert::TorrentComplete { .. }));
 
         // Step 4: NotInterested broadcast — only to the interested peer.
         let msg = rx_a
@@ -1546,7 +1555,7 @@ mod tests {
         // empty here while the peer rx already has a message.
         let drained = alerts.drain();
         assert_eq!(drained.len(), 1, "alert must be queued before broadcast");
-        assert!(matches!(drained[0], Alert::TorrentComplete));
+        assert!(matches!(drained[0], Alert::TorrentComplete { .. }));
         assert!(
             matches!(rx.try_recv(), Ok(SessionToPeer::SetInterested(false))),
             "NotInterested broadcast follows the alert"

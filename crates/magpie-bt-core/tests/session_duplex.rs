@@ -85,6 +85,7 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
 
     let read_cache = Arc::new(magpie_bt_core::session::read_cache::ReadCache::with_defaults());
     let (mut torrent, cmd_tx) = TorrentSession::new(
+        magpie_bt_core::TorrentId::__test_new(1),
         params.clone(),
         info_hash,
         Arc::clone(&alerts),
@@ -219,7 +220,7 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
     let completed: Vec<u32> = all_alerts
         .iter()
         .filter_map(|a| match a {
-            Alert::PieceCompleted { piece } => Some(*piece),
+            Alert::PieceCompleted { piece, .. } => Some(*piece),
             _ => None,
         })
         .collect();
@@ -230,7 +231,7 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
     // completion_fired guard.
     let complete_count = all_alerts
         .iter()
-        .filter(|a| matches!(a, Alert::TorrentComplete))
+        .filter(|a| matches!(a, Alert::TorrentComplete { .. }))
         .count();
     assert_eq!(
         complete_count, 1,

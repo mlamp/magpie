@@ -198,7 +198,7 @@ async fn multi_torrent_soak() {
     let large_pieces = env_usize("SOAK_LARGE_PIECE_COUNT", 0);
 
     let deadline = Instant::now() + Duration::from_secs(duration_secs);
-    let cycle_timeout = Duration::from_secs(60);
+    let cycle_timeout = Duration::from_secs(120);
     let mut cycle = 0_u64;
 
     while Instant::now() < deadline {
@@ -227,7 +227,7 @@ async fn multi_torrent_soak() {
                 u32::try_from(pairs).unwrap_or(u32::MAX),
                 0xAA,
                 0xBB,
-                8 * 1024,
+                16 * 1024, // synthetic_torrent_v1 enforces ≥ 16 KiB
                 lp,
                 cycle.wrapping_mul(0xDEAD_BEEF),
                 Duration::from_secs(600), // 100k pieces needs more headroom

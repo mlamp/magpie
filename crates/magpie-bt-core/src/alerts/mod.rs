@@ -12,17 +12,19 @@
 //! # Example
 //! ```
 //! use magpie_bt_core::alerts::{Alert, AlertCategory, AlertQueue};
+//! use magpie_bt_core::TorrentId;
 //!
+//! let tid = TorrentId::__test_new(1);
 //! let q = AlertQueue::new(16);
-//! q.push(Alert::PieceCompleted { piece: 3 });
-//! q.push(Alert::PeerConnected { peer: 42 });
+//! q.push(Alert::PieceCompleted { torrent: tid, piece: 3 });
+//! q.push(Alert::PeerConnected { torrent: tid, peer: magpie_bt_core::PeerSlot(42) });
 //! let batch = q.drain();
 //! assert_eq!(batch.len(), 2);
-//! assert!(matches!(batch[0], Alert::PieceCompleted { piece: 3 }));
+//! assert!(matches!(batch[0], Alert::PieceCompleted { piece: 3, .. }));
 //! // Category filtering:
 //! q.set_mask(AlertCategory::PIECE);
-//! q.push(Alert::PeerConnected { peer: 7 }); // filtered out
-//! q.push(Alert::PieceCompleted { piece: 4 });
+//! q.push(Alert::PeerConnected { torrent: tid, peer: magpie_bt_core::PeerSlot(7) }); // filtered out
+//! q.push(Alert::PieceCompleted { torrent: tid, piece: 4 });
 //! assert_eq!(q.drain().len(), 1);
 //! ```
 

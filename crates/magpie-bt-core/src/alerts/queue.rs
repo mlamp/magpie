@@ -160,12 +160,15 @@ impl std::fmt::Debug for AlertQueue {
 mod tests {
     use super::*;
     use crate::alerts::category::{Alert, AlertErrorCode};
+    use crate::ids::{PeerSlot, TorrentId};
+
+    const TID: TorrentId = TorrentId::__test_new(1);
 
     #[test]
     fn push_drain_roundtrip() {
         let q = AlertQueue::new(8);
-        q.push(Alert::PieceCompleted { piece: 1 });
-        q.push(Alert::PieceCompleted { piece: 2 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 1 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 2 });
         let batch = q.drain();
         assert_eq!(batch.len(), 2);
         assert_eq!(q.drain().len(), 0);
@@ -174,8 +177,8 @@ mod tests {
     #[test]
     fn category_mask_filters_push() {
         let q = AlertQueue::with_mask(8, AlertCategory::PIECE);
-        assert!(q.push(Alert::PieceCompleted { piece: 1 }));
-        assert!(!q.push(Alert::PeerConnected { peer: 42 }));
+        assert!(q.push(Alert::PieceCompleted { torrent: TID, piece: 1 }));
+        assert!(!q.push(Alert::PeerConnected { torrent: TID, peer: PeerSlot(42) }));
         assert!(!q.push(Alert::StatsTick));
         let batch = q.drain();
         assert_eq!(batch.len(), 1);
@@ -185,26 +188,26 @@ mod tests {
     fn overflow_drops_oldest_and_emits_sentinel() {
         let q = AlertQueue::new(3);
         for i in 0..5 {
-            q.push(Alert::PieceCompleted { piece: i });
+            q.push(Alert::PieceCompleted { torrent: TID, piece: i });
         }
         let batch = q.drain();
         // Sentinel first, then 3 most-recent pieces (2, 3, 4).
         assert_eq!(batch.len(), 4);
         assert_eq!(batch[0], Alert::Dropped { count: 2 });
-        assert_eq!(batch[1], Alert::PieceCompleted { piece: 2 });
-        assert_eq!(batch[3], Alert::PieceCompleted { piece: 4 });
+        assert_eq!(batch[1], Alert::PieceCompleted { torrent: TID, piece: 2 });
+        assert_eq!(batch[3], Alert::PieceCompleted { torrent: TID, piece: 4 });
     }
 
     #[test]
     fn dropped_sentinel_resets_after_drain() {
         let q = AlertQueue::new(2);
-        q.push(Alert::PieceCompleted { piece: 1 });
-        q.push(Alert::PieceCompleted { piece: 2 });
-        q.push(Alert::PieceCompleted { piece: 3 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 1 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 2 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 3 });
         let _ = q.drain();
-        q.push(Alert::PieceCompleted { piece: 4 });
+        q.push(Alert::PieceCompleted { torrent: TID, piece: 4 });
         let batch = q.drain();
-        assert_eq!(batch, vec![Alert::PieceCompleted { piece: 4 }]);
+        assert_eq!(batch, vec![Alert::PieceCompleted { torrent: TID, piece: 4 }]);
     }
 
     #[test]
@@ -238,6 +241,7 @@ mod tests {
         });
         tokio::task::yield_now().await;
         q.push(Alert::Error {
+            torrent: TID,
             code: AlertErrorCode::PeerProtocol,
         });
         let batch = handle.await.unwrap();

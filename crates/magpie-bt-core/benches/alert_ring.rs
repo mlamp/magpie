@@ -7,6 +7,9 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use magpie_bt_core::alerts::{Alert, AlertCategory, AlertQueue};
+use magpie_bt_core::{PeerSlot, TorrentId};
+
+const TID: TorrentId = TorrentId::__test_new(1);
 
 fn bench_push(c: &mut Criterion) {
     let mut group = c.benchmark_group("alert_ring/push");
@@ -16,7 +19,7 @@ fn bench_push(c: &mut Criterion) {
             let q = AlertQueue::new(cap);
             let mut piece = 0_u32;
             b.iter(|| {
-                q.push(black_box(Alert::PieceCompleted { piece }));
+                q.push(black_box(Alert::PieceCompleted { torrent: TID, piece }));
                 piece = piece.wrapping_add(1);
             });
         });
@@ -32,11 +35,11 @@ fn bench_push_overflow(c: &mut Criterion) {
     group.bench_function("cap_4", |b| {
         let q = AlertQueue::new(4);
         for i in 0..4 {
-            q.push(Alert::PieceCompleted { piece: i });
+            q.push(Alert::PieceCompleted { torrent: TID, piece: i });
         }
         let mut piece = 100_u32;
         b.iter(|| {
-            q.push(black_box(Alert::PieceCompleted { piece }));
+            q.push(black_box(Alert::PieceCompleted { torrent: TID, piece }));
             piece = piece.wrapping_add(1);
         });
     });
@@ -50,12 +53,12 @@ fn bench_drain(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("n", n), &n, |b, &n| {
             let q = AlertQueue::new(n);
             for i in 0..n as u32 {
-                q.push(Alert::PieceCompleted { piece: i });
+                q.push(Alert::PieceCompleted { torrent: TID, piece: i });
             }
             b.iter_batched(
                 || {
                     for i in 0..n as u32 {
-                        q.push(Alert::PieceCompleted { piece: i });
+                        q.push(Alert::PieceCompleted { torrent: TID, piece: i });
                     }
                 },
                 |()| {
@@ -77,7 +80,7 @@ fn bench_masked_push(c: &mut Criterion) {
     group.bench_function("rejected", |b| {
         let q = AlertQueue::with_mask(64, AlertCategory::PIECE);
         b.iter(|| {
-            q.push(black_box(Alert::PeerConnected { peer: 1 }));
+            q.push(black_box(Alert::PeerConnected { torrent: TID, peer: PeerSlot(1) }));
         });
     });
     group.finish();

@@ -9,6 +9,9 @@
 //! - after drain, `pending()` == 0.
 use libfuzzer_sys::fuzz_target;
 use magpie_bt_core::alerts::{Alert, AlertCategory, AlertErrorCode, AlertQueue};
+use magpie_bt_core::{PeerSlot, TorrentId};
+
+const TID: TorrentId = TorrentId::__test_new(1);
 
 fuzz_target!(|data: &[u8]| {
     if data.is_empty() {
@@ -22,17 +25,17 @@ fuzz_target!(|data: &[u8]| {
     for &b in &data[1..] {
         match b % 10 {
             0 => {
-                if q.push(Alert::PieceCompleted { piece: u32::from(b) }) {
+                if q.push(Alert::PieceCompleted { torrent: TID, piece: u32::from(b) }) {
                     expected_pushes += 1;
                 }
             }
             1 => {
-                if q.push(Alert::PeerConnected { peer: u64::from(b) }) {
+                if q.push(Alert::PeerConnected { torrent: TID, peer: PeerSlot(u64::from(b)) }) {
                     expected_pushes += 1;
                 }
             }
             2 => {
-                if q.push(Alert::PeerDisconnected { peer: u64::from(b) }) {
+                if q.push(Alert::PeerDisconnected { torrent: TID, peer: PeerSlot(u64::from(b)) }) {
                     expected_pushes += 1;
                 }
             }
@@ -42,12 +45,12 @@ fuzz_target!(|data: &[u8]| {
                 }
             }
             4 => {
-                if q.push(Alert::TrackerResponse { torrent: u64::from(b) }) {
+                if q.push(Alert::TrackerResponse { torrent: TID }) {
                     expected_pushes += 1;
                 }
             }
             5 => {
-                if q.push(Alert::Error { code: AlertErrorCode::PeerProtocol }) {
+                if q.push(Alert::Error { torrent: TID, code: AlertErrorCode::PeerProtocol }) {
                     expected_pushes += 1;
                 }
             }

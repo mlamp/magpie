@@ -21,7 +21,7 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
-magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.0-alpha.2" }
 thiserror.workspace = true
 sha1.workspace = true
 sha2.workspace = true

@@ -216,7 +216,7 @@ async fn run(args: Args) -> Result<(), String> {
 
         for a in alerts.drain() {
             match a {
-                Alert::PieceCompleted { piece: _ } => completed += 1,
+                Alert::PieceCompleted { .. } => completed += 1,
                 Alert::PeerConnected { .. } => peers_connected += 1,
                 Alert::PeerDisconnected { .. } => peers_connected -= 1,
                 _ => {}

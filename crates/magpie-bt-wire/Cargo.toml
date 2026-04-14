@@ -13,7 +13,7 @@ categories = ["network-programming", "parser-implementations"]
 readme = "README.md"
 
 [dependencies]
-magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.0.1" }
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.0-alpha.2" }
 bytes.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true

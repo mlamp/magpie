@@ -41,22 +41,7 @@ use crate::session::{
 };
 use crate::storage::Storage;
 
-/// Engine-issued torrent handle.
-///
-/// Opaque (the inner `u64` is private) — callers receive `TorrentId`s from
-/// [`Engine::add_torrent`] and must not mint their own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TorrentId(u64);
-
-impl TorrentId {
-    /// Test-only constructor. Not part of the public API contract — the
-    /// engine mints ids from an internal counter in production.
-    #[doc(hidden)]
-    #[must_use]
-    pub const fn __test_new(n: u64) -> Self {
-        Self(n)
-    }
-}
+pub use crate::ids::TorrentId;
 
 /// Per-peer TCP connect budget (M1 baseline). Without this, NAT'd /
 /// firewalled peer addresses returned by the tracker could pin a single
@@ -369,7 +354,7 @@ impl Engine {
         let refiller_task = tokio::spawn(refiller.run());
         Self {
             alerts,
-            next_torrent_id: AtomicU64::new(0),
+            next_torrent_id: AtomicU64::new(1), // 0 reserved
             next_peer_slot: AtomicU64::new(0),
             torrents: RwLock::new(HashMap::new()),
             info_hash_index: RwLock::new(HashMap::new()),
@@ -453,8 +438,11 @@ impl Engine {
             DiskWriter::new(Arc::clone(&req.storage), req.disk_queue_capacity);
         let disk_task = tokio::spawn(disk_writer.run());
 
+        let id = TorrentId::new(self.next_torrent_id.fetch_add(1, Ordering::Relaxed));
+
         let (peer_to_session_tx, peer_to_session_rx) = mpsc::channel(PEER_TO_SESSION_CAPACITY);
         let (mut session, cmd_tx) = TorrentSession::new(
+            id,
             req.params,
             req.info_hash,
             Arc::clone(&self.alerts),
@@ -465,11 +453,7 @@ impl Engine {
         if !req.initial_have.is_empty() {
             session.apply_initial_have(&req.initial_have);
         }
-        let session_task = tokio::spawn(async move {
-            let _ = session.run().await;
-        });
 
-        let id = TorrentId(self.next_torrent_id.fetch_add(1, Ordering::Relaxed));
         let handshake_template = PeerConfig {
             peer_id: req.peer_id,
             info_hash: req.info_hash,
@@ -494,6 +478,9 @@ impl Engine {
             torrent_stats: Arc::new(crate::session::stats::PerTorrentStats::new()),
             live_peer_stats: Arc::new(StdMutex::new(HashMap::new())),
         };
+        // Insert into the registry BEFORE spawning the session task so that
+        // alerts referencing this TorrentId are never delivered before the
+        // consumer can look the torrent up.
         let mut torrents = self.torrents.write().await;
         let mut index = self.info_hash_index.write().await;
         torrents.insert(id, entry);
@@ -505,6 +492,10 @@ impl Engine {
         // only participates in refill demand aggregation until M5 cap
         // enablement flips rates off passthrough.
         self.shaper.register_torrent_passthrough(id);
+
+        let session_task = tokio::spawn(async move {
+            let _ = session.run().await;
+        });
         self.tasks.lock().await.push(disk_task);
         self.tasks.lock().await.push(session_task);
         Ok(id)
@@ -721,6 +712,7 @@ impl Engine {
                                 {
                                     tracing::debug!(%addr, error = %e, "add_peer failed");
                                     alerts.push(Alert::Error {
+                                        torrent: torrent_id,
                                         code: AlertErrorCode::PeerProtocol,
                                     });
                                 }
@@ -732,6 +724,7 @@ impl Engine {
                     Err(e) => {
                         tracing::warn!(error = %e, "tracker announce failed");
                         alerts.push(Alert::Error {
+                            torrent: torrent_id,
                             code: AlertErrorCode::TrackerFailed,
                         });
                         tokio::time::sleep(cfg.error_backoff).await;
@@ -788,6 +781,7 @@ impl Engine {
         if delete_files && let Err(err) = entry.storage.delete() {
             tracing::warn!(error = %err, ?torrent_id, "remove: storage.delete() failed");
             self.alerts.push(Alert::Error {
+                torrent: torrent_id,
                 code: AlertErrorCode::StorageIo,
             });
         }

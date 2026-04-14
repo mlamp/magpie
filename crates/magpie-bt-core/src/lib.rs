@@ -11,6 +11,9 @@
 
 pub mod alerts;
 pub mod engine;
+pub mod ids;
+
+pub use ids::{PeerSlot, TorrentId};
 #[cfg(feature = "prometheus")]
 pub mod metrics_exporter;
 pub mod peer_filter;

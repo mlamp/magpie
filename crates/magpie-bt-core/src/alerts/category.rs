@@ -1,37 +1,51 @@
 //! Alert categories and the typed [`Alert`] enum.
 
+use crate::ids::{PeerSlot, TorrentId};
+
 /// A typed event emitted by the magpie engine.
 ///
 /// Variants are deliberately `Copy` so alerts can be passed through the ring
 /// without allocation. Heavy payloads live outside the alert — consumers look
 /// them up via the engine's query API using the IDs carried here.
+///
+/// Torrent-scoped variants carry a [`TorrentId`] so multi-torrent consumers
+/// can attribute events without polling. Global variants (`StatsTick`,
+/// `StatsUpdate`, `Dropped`) carry no torrent context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Alert {
     /// A piece finished downloading and passed hash verification.
     PieceCompleted {
+        /// Which torrent this piece belongs to.
+        torrent: TorrentId,
         /// Zero-based piece index.
         piece: u32,
     },
     /// A new peer connected.
     PeerConnected {
-        /// Opaque handle for the peer.
-        peer: u64,
+        /// Which torrent this peer is serving.
+        torrent: TorrentId,
+        /// Per-connection slot identifier.
+        peer: PeerSlot,
     },
     /// A peer disconnected.
     PeerDisconnected {
-        /// Peer handle.
-        peer: u64,
+        /// Which torrent this peer was serving.
+        torrent: TorrentId,
+        /// Per-connection slot identifier.
+        peer: PeerSlot,
     },
     /// Periodic stats tick — consumer queries stats via the engine API.
     StatsTick,
-    /// Tracker response received for the given torrent handle.
+    /// Tracker response received for the given torrent.
     TrackerResponse {
-        /// Torrent handle.
-        torrent: u64,
+        /// Which torrent the tracker responded for.
+        torrent: TorrentId,
     },
-    /// Engine-side error event.
+    /// Engine-side error event. All current error sources are torrent-scoped.
     Error {
+        /// Which torrent encountered the error.
+        torrent: TorrentId,
         /// Classification of the error.
         code: AlertErrorCode,
     },
@@ -46,18 +60,25 @@ pub enum Alert {
     /// verified). Fires exactly once per torrent lifecycle per ADR-0019.
     /// Torrents that load complete-from-resume do not emit this — the
     /// alert signals a *transition*, not a state.
-    TorrentComplete,
-    /// Periodic 1 Hz stats update (ADR-0014). Consumers query the engine
-    /// API for the actual counters; this alert is purely a wake signal.
+    TorrentComplete {
+        /// Which torrent completed.
+        torrent: TorrentId,
+    },
+    /// Periodic 1 Hz global stats wake signal (ADR-0014). Consumers query
+    /// the engine API for per-torrent counters; this alert is purely a
+    /// notification that new data is available.
     StatsUpdate,
 }
+
+// Compile-time size guard — keep alerts small for the ring (ADR-0002).
+const _: () = assert!(size_of::<Alert>() <= 24);
 
 impl Alert {
     /// Returns the category this alert belongs to.
     #[must_use]
     pub const fn category(&self) -> AlertCategory {
         match self {
-            Self::PieceCompleted { .. } | Self::TorrentComplete => AlertCategory::PIECE,
+            Self::PieceCompleted { .. } | Self::TorrentComplete { .. } => AlertCategory::PIECE,
             Self::PeerConnected { .. } | Self::PeerDisconnected { .. } => AlertCategory::PEER,
             Self::TrackerResponse { .. } => AlertCategory::TRACKER,
             Self::Error { .. } => AlertCategory::ERROR,
