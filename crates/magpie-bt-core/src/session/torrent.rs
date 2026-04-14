@@ -474,6 +474,7 @@ impl TorrentSession {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle(&mut self, msg: PeerToSession) {
         match msg {
             PeerToSession::Connected {

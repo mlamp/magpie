@@ -26,7 +26,7 @@ use sha1::{Digest as _, Sha1};
 #[non_exhaustive]
 pub struct SyntheticTorrent {
     /// Bencode-encoded `.torrent` bytes. Feed to
-    /// [`crate::parse`] to obtain a [`MetaInfo`].
+    /// [`crate::parse`] to obtain a [`crate::MetaInfo`].
     pub torrent: Vec<u8>,
     /// Raw file content matching the torrent's piece hashes. `len()` equals
     /// `piece_length * piece_count`.

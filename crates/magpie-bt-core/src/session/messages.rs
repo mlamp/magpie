@@ -97,7 +97,7 @@ pub enum SessionCommand {
         max_in_flight: u32,
         /// Negotiated fast-ext bit — `true` only when **both** sides
         /// advertised BEP 6 in their handshake. Lets
-        /// [`TorrentSession::register_peer_with`] use the 1-byte
+        /// [`super::TorrentSession::register_peer_with`] use the 1-byte
         /// `HaveAll`/`HaveNone` shortcut instead of a full `Bitfield`
         /// when the current `have` bitmap is all-1 or all-0 (#21 plan).
         supports_fast: bool,
