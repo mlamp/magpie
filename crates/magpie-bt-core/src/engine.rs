@@ -809,17 +809,22 @@ impl Engine {
     }
 
     /// Wait for every spawned task to complete. Call after shutting down all
-    /// torrents (or just rely on dropping the engine). Idempotent.
+    /// torrents. Idempotent.
+    ///
+    /// Aborts all tasks before awaiting them. The listener task runs an
+    /// infinite accept loop that never exits on its own; session, disk,
+    /// and peer tasks should have already exited after [`Self::shutdown`]
+    /// but aborting them is harmless (accelerates cleanup).
     pub async fn join(&self) {
-        // Abort the Refiller first — its loop is infinite and awaiting it
-        // directly would deadlock `join`. Other tasks (disk, session, peer)
-        // exit on their own when their torrents shut down.
         let refiller_handle = self.refiller_task.lock().await.take();
         if let Some(handle) = refiller_handle {
             handle.abort();
             let _ = handle.await;
         }
         let tasks = std::mem::take(&mut *self.tasks.lock().await);
+        for h in &tasks {
+            h.abort();
+        }
         for h in tasks {
             let _ = h.await;
         }

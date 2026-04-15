@@ -80,6 +80,9 @@ fn extract_pieces(torrent: &[u8]) -> Vec<u8> {
 
 /// One full cycle: spin up a seeder + leecher pair for the given torrent,
 /// drive the leecher to completion, assert SHA-256 match, tear both down.
+///
+/// Returns `Err` on timeout or verification failure instead of panicking,
+/// so cleanup always runs (prevents FD leaks across soak cycles).
 async fn run_pair(
     pair_id: u32,
     seed_id_byte: u8,
@@ -88,7 +91,7 @@ async fn run_pair(
     piece_count: u32,
     seed: u64,
     cycle_timeout: Duration,
-) {
+) -> Result<(), String> {
     let synth = synthetic_torrent_v1(
         &format!("soak-{pair_id}.bin"),
         piece_length,
@@ -122,7 +125,10 @@ async fn run_pair(
     );
     seed_req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
     seed_req.initial_have = vec![true; piece_count as usize];
-    let seed_tid = seed_engine.add_torrent(seed_req).await.expect("seed add");
+    let seed_tid = seed_engine
+        .add_torrent(seed_req)
+        .await
+        .map_err(|e| format!("soak pair {pair_id}: seed add: {e}"))?;
     let seed_listen = ListenConfig {
         peer_filter: Arc::new(DefaultPeerFilter::permissive_for_tests()),
         ..ListenConfig::default()
@@ -130,7 +136,7 @@ async fn run_pair(
     let seed_addr = seed_engine
         .listen("127.0.0.1:0".parse().unwrap(), seed_listen)
         .await
-        .expect("seed listen");
+        .map_err(|e| format!("soak pair {pair_id}: seed listen: {e}"))?;
 
     // Leech engine.
     let leech_alerts = Arc::new(AlertQueue::new(256));
@@ -152,42 +158,64 @@ async fn run_pair(
     let leech_tid = leech_engine
         .add_torrent(leech_req)
         .await
-        .expect("leech add");
+        .map_err(|e| format!("soak pair {pair_id}: leech add: {e}"))?;
     leech_engine
         .add_peer(leech_tid, seed_addr)
         .await
-        .expect("leech connect");
+        .map_err(|e| format!("soak pair {pair_id}: leech connect: {e}"))?;
 
-    // Drive leech to completion.
+    // Drive leech to completion. Use TorrentComplete as the authoritative
+    // signal — individual PieceCompleted alerts may be evicted from the
+    // bounded queue under high piece counts (100k+).
     let deadline = Instant::now() + cycle_timeout;
     let mut completed = 0_usize;
-    while completed < piece_count as usize {
+    let mut torrent_complete = false;
+    let transfer_result = loop {
         if Instant::now() > deadline {
-            panic!("soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces");
+            break Err(format!(
+                "soak pair {pair_id}: cycle timed out at {completed}/{piece_count} pieces"
+            ));
         }
         let drained = leech_alerts.drain();
         completed += drained
             .iter()
             .filter(|a| matches!(a, Alert::PieceCompleted { .. }))
             .count();
-        if completed < piece_count as usize {
-            tokio::time::sleep(Duration::from_millis(20)).await;
+        if drained
+            .iter()
+            .any(|a| matches!(a, Alert::TorrentComplete { .. }))
+        {
+            torrent_complete = true;
         }
-    }
+        if torrent_complete {
+            break Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
 
-    // Verify.
-    let mut got = vec![0u8; total as usize];
-    leech_storage.read_block(0, &mut got).expect("leech read");
-    assert_eq!(
-        sha256(&got),
-        content_sha,
-        "soak pair {pair_id} cycle: SHA-256 mismatch (silent corruption)"
-    );
+    // Verify data integrity if transfer completed.
+    let verify_result = if torrent_complete {
+        let mut got = vec![0u8; total as usize];
+        leech_storage.read_block(0, &mut got).expect("leech read");
+        if sha256(&got) == content_sha {
+            Ok(())
+        } else {
+            Err(format!(
+                "soak pair {pair_id} cycle: SHA-256 mismatch (silent corruption)"
+            ))
+        }
+    } else {
+        Ok(())
+    };
 
+    // Always cleanup — prevents FD leaks even on failure.
     seed_engine.shutdown(seed_tid).await;
     leech_engine.shutdown(leech_tid).await;
     let _ = tokio::time::timeout(Duration::from_secs(2), seed_engine.join()).await;
     let _ = tokio::time::timeout(Duration::from_secs(2), leech_engine.join()).await;
+
+    transfer_result?;
+    verify_result
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
@@ -237,10 +265,14 @@ async fn multi_torrent_soak() {
         let mut failures = 0u32;
         for h in handles {
             match h.await {
-                Ok(()) => {}
+                Ok(Ok(())) => {}
+                Ok(Err(msg)) => {
+                    failures += 1;
+                    eprintln!("[soak] pair failed in cycle {cycle}: {msg}");
+                }
                 Err(e) => {
                     failures += 1;
-                    eprintln!("[soak] pair failed in cycle {cycle}: {e}");
+                    eprintln!("[soak] pair panicked in cycle {cycle}: {e}");
                 }
             }
         }

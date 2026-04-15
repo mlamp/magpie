@@ -127,6 +127,16 @@ Accepted directions — the prose lives in each ADR file under `../adr/`.
 
 - **ADR-0002 alert-ring revisit** (status: deferred post-M2). Once seeding produces realistic event volumes, profile custom arena vs. `broadcast<Arc<Alert>>`. If the arena isn't measurably faster, swap with a single follow-up ADR. Schema unchanged either way. Tracked here so the profiling work isn't lost.
 
+## Technical debt from soak-fix (2026-04-15)
+
+The 24h soak fix (`biased select!`, `TorrentComplete` detection, `join()` abort-all, `run_pair` Result refactor) leaves three accepted limitations to address in M3+:
+
+1. **Engine shutdown needs CancellationToken** (`engine.rs`). Currently `join()` aborts all tasks indiscriminately. A proper shutdown should use `tokio_util::sync::CancellationToken` (requires adding `sync` feature to `tokio-util` workspace dep) to: (a) signal the listener's infinite accept loop to exit gracefully, (b) give peer tasks a grace period to run cleanup (`retire_peer`, `release_peer_id`, `release_peer_slot`) before aborting. Without this, a long-lived daemon reusing `Engine` instances inflates `global_peer_count` permanently for each aborted peer.
+
+2. **Inner handler tasks not tracked** (`engine.rs:1025`). Per-connection `handle_inbound` tasks spawned inside the listener loop are fire-and-forget (`tokio::spawn` without pushing to `self.tasks`). After `join()`, in-flight handlers continue up to `handshake_timeout` (10s), holding `Arc<Engine>`. In the soak test with one peer per torrent this is benign, but in production with many inbound connections it leaks Engine references and sockets briefly.
+
+3. **Alert queue shared across torrents can lose TorrentComplete** (`alerts/queue.rs`). A single `AlertQueue` is shared per engine. In a multi-torrent scenario, a flood of `PieceCompleted` from torrent A could evict torrent B's `TorrentComplete` before the consumer drains. For production multi-torrent use, consider a dedicated out-of-band completion channel (e.g. `oneshot::Sender<TorrentId>` per torrent) or per-torrent alert queues. Related to ADR-0002 alert-ring revisit above.
+
 ## Out of scope
 
 - DHT, magnet, PEX, LSD, BEP 5/9/10/11/14 → M3.

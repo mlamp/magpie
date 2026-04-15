@@ -411,15 +411,12 @@ impl TorrentSession {
         // torrent still needs to serve inbound block requests (seed mode).
         // Exit only on explicit Shutdown or channel close.
         loop {
+            // Biased: cmd_rx first so RegisterPeer is always processed
+            // before any peer messages on rx (spawn_peer awaits
+            // cmd_tx.send() before tokio::spawn, guaranteeing ordering).
+            // completion_rx second to clear disk backpressure promptly.
             tokio::select! {
-                msg = self.rx.recv() => match msg {
-                    None => break,
-                    Some(m) => self.handle(m).await,
-                },
-                completion = self.completion_rx.recv() => match completion {
-                    None => break,
-                    Some(c) => self.handle_completion(c),
-                },
+                biased;
                 cmd = self.cmd_rx.recv() => match cmd {
                     None | Some(SessionCommand::Shutdown) => break,
                     Some(SessionCommand::RegisterPeer { slot, tx, max_in_flight, supports_fast }) => {
@@ -427,6 +424,14 @@ impl TorrentSession {
                     }
                     Some(SessionCommand::Pause) => self.set_paused(true),
                     Some(SessionCommand::Resume) => self.set_paused(false),
+                },
+                completion = self.completion_rx.recv() => match completion {
+                    None => break,
+                    Some(c) => self.handle_completion(c),
+                },
+                msg = self.rx.recv() => match msg {
+                    None => break,
+                    Some(m) => self.handle(m).await,
                 },
             }
             // Only the leech path schedules requests outbound, and never
@@ -545,6 +550,8 @@ impl TorrentSession {
                             self.picker.forget_peer_bitfield(&p.have);
                             p.have = bits;
                             self.picker.observe_peer_bitfield(&p.have);
+                        } else {
+                            tracing::warn!(slot = slot.0, "Bitfield for unknown peer — biased select invariant violated?");
                         }
                         self.maybe_express_interest(slot);
                     }
@@ -558,6 +565,8 @@ impl TorrentSession {
                     self.picker.forget_peer_bitfield(&p.have);
                     p.have = vec![true; self.params.piece_count as usize];
                     self.picker.observe_peer_bitfield(&p.have);
+                } else {
+                    tracing::warn!(slot = slot.0, "HaveAll for unknown peer — biased select invariant violated?");
                 }
                 self.maybe_express_interest(slot);
             }
@@ -565,7 +574,10 @@ impl TorrentSession {
                 if let Some(p) = self.peers.get_mut(&slot) {
                     self.picker.forget_peer_bitfield(&p.have);
                     p.have = vec![false; self.params.piece_count as usize];
+                } else {
+                    tracing::warn!(slot = slot.0, "HaveNone for unknown peer — biased select invariant violated?");
                 }
+                self.maybe_express_interest(slot);
             }
             PeerToSession::Rejected { slot, req } => {
                 self.release_block_claim(slot, req);
