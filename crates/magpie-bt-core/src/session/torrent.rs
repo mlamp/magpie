@@ -427,6 +427,13 @@ impl TorrentSession {
     /// Drain buffered PEX-discovered peer addresses. The engine calls this
     /// periodically and feeds the returned addresses into `add_peer`.
     pub fn drain_pex_discovered(&mut self) -> Vec<SocketAddr> {
+        // Defense-in-depth: even if `pex_discovered` somehow got populated
+        // (it shouldn't — `handle_pex_inbound` is already gated), refuse
+        // to surface PEX peers for a private torrent per BEP 27.
+        if !self.pex.is_enabled() {
+            self.pex_discovered.clear();
+            return Vec::new();
+        }
         std::mem::take(&mut self.pex_discovered)
     }
 
@@ -2030,6 +2037,106 @@ mod tests {
         assert!(
             matches!(rx.try_recv(), Ok(SessionToPeer::SetInterested(false))),
             "NotInterested broadcast follows the alert"
+        );
+    }
+
+    // --- BEP 27 private-flag regression suite -----------------------------
+    //
+    // Lock in the invariant that `private = true` → PEX/LSD MUST be
+    // suppressed (BEP 27 §"Private Torrents"). LSD has its own test in
+    // `lsd::tests::private_torrent_not_registered`; these tests cover
+    // the PEX + drain paths end-to-end at the session layer.
+
+    fn private_params(piece_count: u32) -> TorrentParams {
+        TorrentParams {
+            piece_count,
+            piece_length: 32 * 1024,
+            total_length: u64::from(piece_count) * 32 * 1024,
+            piece_hashes: vec![0u8; (piece_count as usize) * 20],
+            private: true,
+        }
+    }
+
+    fn private_session() -> (TorrentSession, Arc<AlertQueue>) {
+        let alerts = Arc::new(AlertQueue::new(16));
+        let (_, peer_rx) = mpsc::channel(4);
+        let (disk_tx, _disk_rx) = mpsc::channel(4);
+        let read_cache = Arc::new(ReadCache::new(0));
+        let (session, _cmd_tx) = TorrentSession::new(
+            TorrentId::__test_new(1),
+            private_params(2),
+            [0u8; 20],
+            Arc::clone(&alerts),
+            peer_rx,
+            disk_tx,
+            read_cache,
+            50,
+        );
+        (session, alerts)
+    }
+
+    #[test]
+    fn bep_0027_private_torrent_ignores_inbound_pex() {
+        let (mut session, _alerts) = private_session();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        assert!(session.register_peer(PeerSlot(1), tx));
+
+        // Craft a valid BEP 11 PEX message with one added peer. We
+        // don't care about the exact bytes; we just need something
+        // well-formed enough that a public torrent would accept it.
+        let msg = magpie_bt_wire::PexMessage {
+            added: vec![magpie_bt_wire::PexPeer {
+                addr: "10.0.0.1:6881".parse().unwrap(),
+                flags: magpie_bt_wire::PexFlags::default(),
+            }],
+            dropped: Vec::new(),
+        };
+        let payload = msg.encode();
+
+        session.handle_pex_inbound(PeerSlot(1), &payload);
+        assert!(
+            session.pex_discovered.is_empty(),
+            "private torrent must not buffer PEX-discovered peers"
+        );
+    }
+
+    #[test]
+    fn bep_0027_private_torrent_sends_no_outbound_pex() {
+        let (mut session, _alerts) = private_session();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        assert!(session.register_peer(PeerSlot(1), tx));
+        drain_initial_advert(&mut rx);
+
+        // Populate a would-be PEX peer set (even though the session
+        // state is private). If the outbound gate works, nothing
+        // additional lands on rx.
+        session.send_pex_round();
+
+        match rx.try_recv() {
+            Err(_) => {} // expected — no outbound message
+            Ok(other) => panic!(
+                "private torrent must not emit outbound PEX, got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn bep_0027_private_torrent_drain_pex_is_empty_defensively() {
+        // Even if something upstream went wrong and `pex_discovered`
+        // has values, `drain_pex_discovered` must return empty on a
+        // private torrent (defense in depth).
+        let (mut session, _alerts) = private_session();
+        session.pex_discovered.push("10.0.0.1:6881".parse().unwrap());
+        session.pex_discovered.push("10.0.0.2:6881".parse().unwrap());
+
+        let drained = session.drain_pex_discovered();
+        assert!(
+            drained.is_empty(),
+            "private-torrent drain must return empty, got {drained:?}"
+        );
+        assert!(
+            session.pex_discovered.is_empty(),
+            "buffer must also be cleared so a later public drain sees nothing stale"
         );
     }
 }

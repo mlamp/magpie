@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Parity Track D — BEP 27 private-flag audit)
+
+- Defense-in-depth gate on `TorrentSession::drain_pex_discovered`: even
+  though `handle_pex_inbound` is already private-torrent-gated (so
+  `pex_discovered` should never populate for a private torrent),
+  `drain_pex_discovered` now also checks `pex.is_enabled()` and returns
+  empty + clears the buffer if the torrent is private. Two layers of
+  protection against a future bug that bypasses the inbound gate.
+- 3 new regression tests locking the BEP 27 invariants end-to-end at
+  the session layer:
+  - `bep_0027_private_torrent_ignores_inbound_pex` — a valid PEX
+    message delivered to a private session leaves `pex_discovered`
+    empty.
+  - `bep_0027_private_torrent_sends_no_outbound_pex` — calling
+    `send_pex_round` on a private session with a registered peer
+    produces no `SendExtended` messages.
+  - `bep_0027_private_torrent_drain_pex_is_empty_defensively` —
+    even with hand-populated `pex_discovered`, `drain_pex_discovered`
+    returns empty and clears the buffer.
+- LSD already covered by the pre-existing `lsd::tests::private_torrent_not_registered`
+  (unchanged — re-verified as part of the audit pass).
+
 ### Added (Parity Track B — BEP 15 UDP tracker client)
 
 - `UdpTracker` client in `crates/magpie-bt-core/src/tracker/udp.rs` — the
