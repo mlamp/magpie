@@ -24,12 +24,19 @@ set -euo pipefail
 
 SCENARIO="${1:-}"
 case "$SCENARIO" in
-  qbittorrent|transmission) ;;
-  *) echo "usage: $0 {qbittorrent|transmission}" >&2; exit 2 ;;
+  qbittorrent|transmission|qbittorrent-magnet|transmission-magnet) ;;
+  *)
+    echo "usage: $0 {qbittorrent|transmission|qbittorrent-magnet|transmission-magnet}" >&2
+    exit 2
+    ;;
 esac
 
 COMPOSE_FILE="$(dirname "$0")/docker-compose.${SCENARIO}.yml"
 [ -f "$COMPOSE_FILE" ] || { echo "missing: $COMPOSE_FILE" >&2; exit 2; }
+
+# `qbittorrent-magnet` → gate_qbittorrent_magnet.sh; rewrite `-` → `_` so
+# the gate script naming convention matches the scenario id.
+GATE_NAME="${SCENARIO//-/_}"
 
 DEADLINE_SECS="${INTEROP_DEADLINE_SECS:-60}"
 
@@ -51,7 +58,7 @@ echo "[interop:${SCENARIO}] stack up. Dumping initial container logs..."
 docker compose -f "$COMPOSE_FILE" logs --no-color 2>&1 | tail -50
 echo "[interop:${SCENARIO}] Running per-client SHA-256 gate..."
 
-GATE="$(dirname "$0")/gate_${SCENARIO}.sh"
+GATE="$(dirname "$0")/gate_${GATE_NAME}.sh"
 if [ -x "$GATE" ]; then
   INTEROP_DEADLINE_SECS="$DEADLINE_SECS" "$GATE" "$COMPOSE_FILE"
   echo "[interop:${SCENARIO}] PASS"

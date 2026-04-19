@@ -34,8 +34,8 @@ The detailed gap analysis against librqbit 8 that originally justified this proj
 
 Rationale: BEP 52 has been final since 2020 but adoption in the wild is negligible — public and private trackers, *arr workflows, and existing .torrent files are overwhelmingly v1. A v2-only client can't meaningfully participate in existing swarms. v2 is additive to v1, not a replacement, so writing v1 is ~90% of writing v2. Abstract the hash layer early (`PieceHash::{V1, V2}`), enforce v2 block/piece-size invariants (16 KiB blocks, power-of-two piece sizes) even in v1, and v2/hybrid slots in without a rewrite.
 
-**Day-one BEPs** (by end of M4): 3, 6, 9/10, 12, 15, 23, 27, 29. Per-milestone split: BEPs 3, 6, 23 land in M1; 12, 15, 27 in M2; 9/10 in M3 (magnet + extension protocol); 29 in M4 (uTP).
-**Later**: 5 (DHT), 11 (PEX), 14 (LSD), 52 (v2/hybrid), 19 (WebSeed), 48 (scrape).
+**Day-one BEPs** (by end of M5): 3, 6, 9/10, 12, 15, 23, 27, 29. Per-milestone split: BEPs 3, 6, 23 land in M1; 12, 15, 27 in M2; 9/10/11/14 in M3 (magnet + extension protocol + PEX + LSD); 5 in M4 (DHT); 29 in M5 (uTP).
+**Later**: 52 (v2/hybrid — M5), 19 (WebSeed — M6), 48 (scrape — M6).
 
 ## Architecture principles
 
@@ -57,7 +57,7 @@ Workspace under `magpie`:
 - `magpie-bt-metainfo` — .torrent parsing: v1, v2, hybrid. Hash abstraction.
 - `magpie-bt-wire` — peer protocol codec (framing, messages, extension protocol).
 - `magpie-bt-core` — engine: picker, storage trait, event bus, session orchestration.
-- `magpie-bt-dht` (M3), `magpie-bt-utp` (M4) — optional feature-gated subcrates.
+- `magpie-bt-dht` (M4), `magpie-bt-utp` (M5) — optional feature-gated subcrates.
 - `magpie-bt` — facade crate re-exporting the public API.
 
 ## Inspiration (what to borrow and from where)

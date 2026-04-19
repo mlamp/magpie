@@ -19,8 +19,10 @@
 pub mod choker;
 pub mod disk;
 pub mod messages;
+pub mod metadata_exchange;
 pub mod peer;
 pub mod peer_upload;
+pub mod pex;
 pub mod read_cache;
 pub mod shaper;
 pub mod stats;
@@ -31,10 +33,11 @@ pub use disk::{
     DEFAULT_DISK_QUEUE_CAPACITY, DiskCompletion, DiskError, DiskMetrics, DiskOp, DiskWriter,
 };
 pub use messages::{DisconnectReason, PeerSlot, PeerToSession, SessionCommand, SessionToPeer};
+pub use metadata_exchange::{MetadataAssembler, MetadataAssemblyError};
 pub use peer::{
-    DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_PER_PEER_IN_FLIGHT, HandshakeError, HandshakeRole,
-    PEER_TO_SESSION_CAPACITY, PeerConfig, PeerConn, perform_handshake, read_handshake,
-    write_handshake,
+    DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_PER_PEER_IN_FLIGHT,
+    HandshakeError, HandshakeRole, PEER_TO_SESSION_CAPACITY, PeerConfig, PeerConn,
+    perform_handshake, read_handshake, write_handshake,
 };
 pub use torrent::{
     SESSION_COMMAND_CAPACITY, TorrentParams, TorrentParamsError, TorrentSession, TorrentState,

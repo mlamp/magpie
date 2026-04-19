@@ -75,14 +75,49 @@ fn main() {
     f.write_all(&synth.content).expect("write data");
     f.sync_all().expect("sync data");
 
+    // Write a magnet URI so the magnet-flavoured interop scenarios can
+    // hand a magnet:?xt=urn:btih:...&dn=...&tr=... string to the
+    // third-party leecher rather than a .torrent file. The seeder still
+    // loads the `.torrent` for the seed-side path; only the leecher
+    // bootstraps from the magnet URI.
+    let info_hash_hex: String = synth
+        .info_hash
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let magnet_uri = format!(
+        "magnet:?xt=urn:btih:{info_hash_hex}&dn={dn}&tr={tr}",
+        dn = url_encode(&name),
+        tr = url_encode(&announce_url),
+    );
+    let magnet_path = out_dir.join("fixture.magnet");
+    std::fs::write(&magnet_path, magnet_uri.as_bytes()).expect("write magnet");
+
     eprintln!(
-        "generate_fixture: out_dir={}\n  torrent={}\n  torrent-with-announce={}\n  data={} ({} bytes, {} pieces @ {} B)",
+        "generate_fixture: out_dir={}\n  torrent={}\n  torrent-with-announce={}\n  magnet={}\n  data={} ({} bytes, {} pieces @ {} B)",
         out_dir.display(),
         torrent_path.display(),
         with_announce_path.display(),
+        magnet_path.display(),
         data_path.display(),
         synth.content.len(),
         piece_count,
         piece_length,
     );
+}
+
+/// Minimal RFC 3986 percent-encoder for magnet URI components — escapes
+/// everything except unreserved ASCII (A-Z a-z 0-9 - _ . ~). Avoids a
+/// dependency on a full URL crate for a one-shot CLI.
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.as_bytes() {
+        match *b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }

@@ -1,0 +1,93 @@
+# Interop scenario (magnet variant): magpie seeds + serves ut_metadata
+# (BEP 9) → Transmission leech bootstraps from a magnet:?xt=...&tr=... URI
+# rather than a .torrent file. See docker-compose.qbittorrent-magnet.yml
+# for the full rationale.
+
+services:
+  fixture:
+    build:
+      context: ../..
+      dockerfile: ci/interop/Dockerfile.magpie
+    image: magpie-interop:latest
+    command: generate_fixture
+    environment:
+      FIXTURE_OUT_DIR: /shared
+      FIXTURE_ANNOUNCE: http://tracker:6969/announce
+      FIXTURE_NAME: interop.bin
+      FIXTURE_PIECE_COUNT: 320
+    volumes:
+      - shared:/shared
+
+  tracker:
+    image: magpie-interop:latest
+    depends_on:
+      fixture:
+        condition: service_completed_successfully
+    command: mock_tracker
+    environment:
+      MOCK_TRACKER_PORT: "6969"
+      MOCK_TRACKER_PEERS: "${SEEDER_IP:-10.91.0.10}:6881"
+    networks:
+      default:
+        ipv4_address: 10.91.0.20
+    expose:
+      - "6969"
+
+  seeder:
+    image: magpie-interop:latest
+    depends_on:
+      fixture:
+        condition: service_completed_successfully
+    command:
+      - magpie-seeder
+      - --torrent
+      - /shared/fixture.torrent
+      - --data
+      - /shared/fixture.bin
+      - --listen
+      - 0.0.0.0:6881
+      - --advertise-metadata
+      - --stats-dir
+      - /shared/stats
+      - --flush-secs
+      - "2"
+    volumes:
+      - shared:/shared
+    networks:
+      default:
+        ipv4_address: 10.91.0.10
+    expose:
+      - "6881"
+
+  leech:
+    image: linuxserver/transmission:4.0.6
+    depends_on:
+      tracker:
+        condition: service_started
+      seeder:
+        condition: service_started
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      USER: "admin"
+      PASS: "admin"
+    volumes:
+      - shared:/shared:ro
+      - ./transmission-config:/config
+      - leech-downloads:/downloads
+    ports:
+      - "127.0.0.1:9091:9091"
+    networks:
+      default:
+        ipv4_address: 10.91.0.30
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.91.0.0/24
+
+volumes:
+  shared:
+  leech-downloads:

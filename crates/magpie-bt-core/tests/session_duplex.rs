@@ -92,6 +92,7 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
         peer_to_session_rx,
         disk_tx.clone(),
         read_cache,
+        50, // peer_cap
     );
     let slot = PeerSlot(1);
     assert!(torrent.register_peer(slot, session_to_peer_tx));
@@ -104,9 +105,11 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
         peer_id: leech_peer_id,
         info_hash,
         fast_ext: true,
+        extension_protocol: false,
         max_in_flight: 4,
         max_payload: 256 * 1024,
         handshake_timeout: std::time::Duration::from_secs(5),
+        extension_handshake_timeout: std::time::Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
     };
     let leech_handshake_cfg = peer_config.clone();
     let leech_task = tokio::spawn(async move {
@@ -133,9 +136,11 @@ async fn duplex_leecher_fetches_synthetic_torrent() {
             peer_id: seed_peer_id,
             info_hash,
             fast_ext: true,
+            extension_protocol: false,
             max_in_flight: 0,
             max_payload: 256 * 1024,
             handshake_timeout: std::time::Duration::from_secs(5),
+            extension_handshake_timeout: std::time::Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
         };
         let _remote = perform_handshake(&mut io, &cfg, HandshakeRole::Responder)
             .await

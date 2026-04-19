@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M2 workstream J — multi-file download)
+
+- `MultiFileStorage` (Unix): a new `Storage` impl backing a torrent onto a directory of files. Sorted entries + binary-search walk over torrent offsets + per-entry `pread`/`pwrite`. Zero-length entries are transparent. Writes that straddle file boundaries split across files atomically at the verified-piece granularity (existing `DiskWriter::VerifyAndWrite` semantics). See ADR-0021.
+- `FdPool`: bounded LRU file-descriptor cache, timestamp-based eviction (O(n) scan per evict), no pinning. Default cap `128` (matches rakshasa's tier for Linux `ulimit -n 1024`); `FdPool::with_cap` clamps to `[4, 65536]`. Engine-global: `Engine::new` owns an `Arc<FdPool>`, `Engine::with_fd_pool_cap(cap)` overrides, `Engine::fd_pool()` accessor hands it into `MultiFileStorage` via the `*_from_info` bridges.
+- Convenience bridges `MultiFileStorage::create_from_info` + `open_from_info` take a parsed `magpie_bt_metainfo::Info` and auto-route to the v1 file list (works for pure-v1 and hybrid torrents). Rejects v2-only and single-file with structured errors.
+- `StorageError::Path` variant for fail-closed validation at construction. Rejects `..`, `.`, empty components, path separators inside components, NUL bytes, duplicate paths, total-length overflow, and symlink-escape. No partial state on disk if construction fails.
+- Seeder example (`magpie-bt/examples/seeder.rs`) auto-detects single- vs multi-file from the `--data` path type: file → `FileStorage`, directory → `MultiFileStorage::open_from_info`. No flag needed.
+- `crates/magpie-bt-core/tests/multi_file_download.rs` — two gates:
+  - `magpie_seed_to_magpie_leech_multi_file_sha256_match` (gate 10a): 7-entry fixture engineered for boundary crossings (one piece spans 3 non-zero entries, three more span 2 entries each, zero-length entries interleaved). Fixture builder asserts at construction time that ≥3 pieces cross boundaries and ≥1 piece spans ≥3 non-zero entries (silent-failure guard). Per-file SHA-256 verified.
+  - `fd_pool_bound_under_load` (gate 12): downloads the same 7-file fixture with `FdPool::with_cap(4)` on both ends. Asserts `opens_total() > 4` on both seed and leech to prove LRU eviction + lazy reopen fired, and that content still SHA-256-matches.
+
+### Changed (M3 — BEP 10 extension-parser hardening)
+
+- `magpie-bt-wire::extension` rewritten with a proper `ExtensionError` enum (5 structured variants: `Decode`, `InvalidExtensionId { name, id }`, `TooManyExtensions(usize)`, `MetadataSizeTooLarge(u64)`, `NonUtf8ExtensionName`) replacing the prior `Result<Self, &'static str>`. `MAX_EXTENSIONS = 128` bound exposed; reuses `MAX_METADATA_SIZE` from `metadata.rs`. `PartialEq`/`Eq` derived on `ExtensionHandshake` + `ExtensionRegistry`; `ExtensionRegistry` gains `Default`. 22 tests (up from 3), including negative/boundary cases (ext-id too large, non-utf8 name, metadata_size over limit, too many extensions, BEP 10 id=0 skip, exactly-`MAX_EXTENSIONS` boundary). No API break on `ExtensionRegistry::new`; the one caller in `session::peer` updated to `.map_err(|e| e.to_string())`.
+
+### Added (M3 — Extension protocol + Magnet + PEX + LSD)
+
+- BDD `.feature` files for BEP 9 (`ut_metadata`), 10 (extension protocol), 11 (PEX), 14 (LSD) under `crates/magpie-bt/tests/features/`. Each scenario maps to existing codec / assembler / actor behavior to lock the M3 contract.
+- `docs/bep-coverage.md` rows for BEP 9 / 10 / 11 / 14 promoted `planned → done` and now link to their feature files.
+- BEP 11 PEX-reachability fix: `PeerConfig::local_listen_port` (BEP 10 `p` field) is stamped per-attach from `Engine::listen()`, and inbound `ExtensionHandshake.listen_port` rewrites the per-peer `addr` to `(remote_ip, their_listen_port)`. Without this, PEX rounds advertise the inbound source ephemeral port and other peers can't dial back. Added `Engine::drain_pex_discovered(torrent_id)` accessor (proxied via new `SessionCommand::DrainPexDiscovered`) so consumers and tests can pump discoveries into `add_peer`. New `AddTorrentRequest::pex_interval` test knob lets the integration suite exercise PEX rounds in <1 s rather than 60 s.
+- `tests/pex_discovery.rs` (M3 hard-gate criterion 4): three magpie engines, A seeds, B and C `add_peer` A only. PEX rounds on A advertise B↔C, both leechers complete via the resulting cross-connect, SHA-256 verified end-to-end.
+- Magnet interop scenarios: `ci/interop/docker-compose.qbittorrent-magnet.yml` + `gate_qbittorrent_magnet.sh` and the equivalent Transmission pair feed a `magnet:?xt=urn:btih:...&tr=...` URI to the third-party leech, exercising magpie's BEP 9 `ut_metadata` server end-to-end. Seeder example gains `--advertise-metadata` (plumbs `info_dict_bytes` into `AddTorrentRequest` so the session advertises `metadata_size` in its extension handshake and serves piece requests). `generate_fixture` writes `fixture.magnet` alongside the existing `.torrent` artifacts. `run.sh` accepts the new `qbittorrent-magnet` / `transmission-magnet` scenario ids.
+
 ### Added (M2 — Stages 1–3, in progress)
 
 Stage 1 (foundations):

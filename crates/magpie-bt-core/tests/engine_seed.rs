@@ -99,9 +99,11 @@ async fn engine_seeds_prepopulated_torrent_to_external_leecher() {
         peer_id: *b"-Mg0001-mockleechrxx",
         info_hash,
         fast_ext: true,
+        extension_protocol: false,
         max_in_flight: 4,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_secs(5),
+        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
     };
     perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
         .await

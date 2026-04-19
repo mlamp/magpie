@@ -27,5 +27,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "extension_handshake"
+path = "fuzz_targets/extension_handshake.rs"
+test = false
+doc = false
+bench = false
+
 # Exclude from workspace — cargo-fuzz has its own target dir.
 [workspace]

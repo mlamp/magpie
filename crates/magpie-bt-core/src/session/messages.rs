@@ -2,8 +2,11 @@
 //! ([`TorrentSession`](super::torrent::TorrentSession)) and per-peer tasks
 //! ([`PeerConn`](super::peer::PeerConn)).
 
+use std::collections::HashMap;
+use std::net::SocketAddr;
+
 use bytes::Bytes;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use magpie_bt_wire::BlockRequest;
 
@@ -26,6 +29,8 @@ pub enum PeerToSession {
         slot: PeerSlot,
         peer_id: [u8; 20],
         supports_fast: bool,
+        /// Remote socket address, if known. Used for outbound PEX.
+        addr: Option<SocketAddr>,
     },
     /// Peer choked us.
     Choked { slot: PeerSlot },
@@ -56,6 +61,32 @@ pub enum PeerToSession {
     BlockRequested { slot: PeerSlot, req: BlockRequest },
     /// Peer cancelled a previously requested block.
     RequestCancelled { slot: PeerSlot, req: BlockRequest },
+    /// BEP 10: peer's extension handshake received. Reports which extensions
+    /// the peer supports and their `metadata_size` (BEP 9).
+    ExtensionHandshake {
+        slot: PeerSlot,
+        /// Extensions the peer supports (name -> their ID).
+        extensions: HashMap<String, u8>,
+        /// BEP 9: size of the torrent's metadata in bytes.
+        metadata_size: Option<u64>,
+        /// Peer's reported client name (informational).
+        client: Option<String>,
+        /// BEP 10 `p` field: the peer's TCP listen port (the port other peers
+        /// can dial). Distinct from the connection's source port — for inbound
+        /// peers the source is an ephemeral, for outbound peers the source is
+        /// our local port. This is the value PEX advertises to other peers.
+        listen_port: Option<u16>,
+    },
+    /// BEP 10: extension message received from peer. The `extension_name` is
+    /// resolved from the peer's extension ID to the canonical name using
+    /// the registry.
+    ExtensionMessage {
+        slot: PeerSlot,
+        /// Canonical extension name (e.g. `ut_metadata`, `ut_pex`).
+        extension_name: String,
+        /// Raw bencoded payload.
+        payload: Bytes,
+    },
     /// Peer disconnected (cleanly or with an error).
     Disconnected {
         slot: PeerSlot,
@@ -114,6 +145,15 @@ pub enum SessionCommand {
     /// Initiate graceful shutdown of the torrent: peers receive
     /// `SessionToPeer::Shutdown`, the actor exits its run loop.
     Shutdown,
+    /// BEP 11 (PEX): drain the session's buffered PEX-discovered peer
+    /// addresses. Used by [`Engine::drain_pex_discovered`](crate::engine::Engine::drain_pex_discovered)
+    /// so the consumer (or a future engine pump) can feed addresses into
+    /// [`Engine::add_peer`](crate::engine::Engine::add_peer). Reply is empty
+    /// when no peers are buffered or when the torrent is private.
+    DrainPexDiscovered {
+        /// Reply channel — the actor sends the drained vector and drops.
+        reply: oneshot::Sender<Vec<SocketAddr>>,
+    },
 }
 
 /// Messages flowing **from the torrent actor to a peer task**.
@@ -152,6 +192,13 @@ pub enum SessionToPeer {
     },
     /// Tell the peer we won't serve this request (BEP 6).
     RejectRequest(BlockRequest),
+    /// Send a BEP 10 extension message to this peer.
+    SendExtended {
+        /// Canonical extension name -- `PeerConn` looks up the peer's ID.
+        extension_name: String,
+        /// Raw bencoded payload.
+        payload: Bytes,
+    },
     /// Shut the peer task down.
     Shutdown,
 }

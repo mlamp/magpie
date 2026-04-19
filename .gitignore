@@ -18,3 +18,18 @@
 /fuzz/artifacts/
 /fuzz/coverage/
 .claude/
+
+# Interop container runtime state (committed configs are templates only).
+# qBittorrent/Transmission write resume state, logs, and auto-download a
+# ~8MB GeoIP DB on first run — none of which belong in the repo.
+/ci/interop/qbittorrent-config/qBittorrent/BT_backup/
+/ci/interop/qbittorrent-config/qBittorrent/GeoDB/
+/ci/interop/qbittorrent-config/qBittorrent/logs/
+/ci/interop/qbittorrent-config/qBittorrent/rss/
+/ci/interop/qbittorrent-config/qBittorrent/categories.json
+/ci/interop/qbittorrent-config/qBittorrent/watched_folders.json
+/ci/interop/qbittorrent-config/qBittorrent/qBittorrent-data.conf
+/ci/interop/transmission-config/resume/
+/ci/interop/transmission-config/torrents/
+/ci/interop/transmission-config/stats.json
+/ci/interop/transmission-config/bandwidth-groups.json

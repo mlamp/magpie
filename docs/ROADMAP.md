@@ -15,22 +15,26 @@ HTTP tracker announce (BEP 3, compact BEP 23). Peer wire: handshake, bitfield, h
 **Gate**: fetch Ubuntu ISO from public trackers, no leaks under `dhat`.
 
 ### M2 — Seeder + multi-torrent (consumer-integration ready)
-Upload side; choking algorithm (tit-for-tat + optimistic unchoke). Multi-torrent engine, shared bandwidth limits. Persistent stats (event-driven, no polling). UDP tracker (BEP 15). Multi-tracker (BEP 12), private flag honoured (BEP 27). Public API surface audited against realistic client call-site patterns (client-agnostic). Interop verified in CI against qBittorrent + Transmission via local tracker + synthetic fixtures.
-**Gate**: controlled-swarm reseed (magpie-only, synthetic ~5 MiB, SHA-256 match); 24 h ≥8-torrent soak incl. ≥100k-piece torrent; stats persist across restart (subprocess test); interop scenarios green both directions.
+Upload side; choking algorithm (tit-for-tat + optimistic unchoke). Multi-torrent engine, shared bandwidth limits. Persistent stats (event-driven, no polling). UDP tracker (BEP 15). Multi-tracker (BEP 12), private flag honoured (BEP 27). Multi-file download (`MultiFileStorage` with bounded LRU fd pool, ADR-0021). Public API surface audited against realistic client call-site patterns (client-agnostic). Interop verified in CI against qBittorrent + Transmission via local tracker + synthetic fixtures.
+**Gate**: controlled-swarm reseed (magpie-only, synthetic ~5 MiB, SHA-256 match); 24 h ≥8-torrent soak incl. ≥100k-piece torrent; multi-file torrent with boundary-crossing pieces completes with per-file SHA-256 match; stats persist across restart (subprocess test); interop scenarios green both directions.
 
-### M3 — Magnet + DHT
-BEP 9/10 extension protocol + `ut_metadata` → magnet support. BEP 5 Kademlia DHT (study anacrolix's `dht`). BEP 11 PEX, BEP 14 LSD.
-**Gate**: magnet add works, metadata fetched from peers, swarm found without tracker.
+### M3 — Extension protocol + Magnet + PEX + LSD
+BEP 10 extension protocol (handshake parsing, extension-ID negotiation, dispatch). BEP 9 `ut_metadata` → magnet support via tracker URLs. BEP 11 PEX (rides the BEP 10 infrastructure). BEP 14 LSD (standalone multicast). Magnet URI parser + session integration.
+**Gate**: `magnet:?xt=...&tr=...` add works, metadata fetched from peers, PEX discovers at least one additional peer.
 
-### M4 — uTP + BEP 52 hybrid
+### M4 — DHT
+BEP 5 Kademlia DHT as a standalone `magpie-bt-dht` subcrate (ADR-0001). Routing table, `ping`/`find_node`/`get_peers`/`announce_peer` RPCs, bootstrap, token management, bucket refresh. Wire into UDP demux (ADR-0015 `None → Some` transition). Study anacrolix's `dht` during the research pass.
+**Gate**: swarm found without tracker; magnet add works without `&tr=` parameter.
+
+### M5 — uTP + BEP 52 hybrid
 Userspace uTP (design our own after reading rakshasa, rasterbar, librqbit-utp). Full BEP 52: merkle hash verification, hybrid bi-mode, merkle layer fetch from peers.
 **Gate**: download a hybrid torrent via uTP, v2 hashes verify, reseed it.
 
-### M5 — Parity + client-replacement readiness
+### M6 — Parity + client-replacement readiness
 WebSeed (BEP 19), tracker scrape (BEP 48). UPnP/NAT-PMP (optional subcrate). Piece picker upgrade: rasterbar-style speed-class affinity. Capability bar: magpie is ready to fully replace librqbit in a production client (lightorrent is the current reference consumer — cutover happens on lightorrent's timeline, not magpie's).
 **Gate**: 30-day production-grade soak demonstrated via a real consumer deployment. Memory steady, no hash failures.
 
-### M6+ — Polish
+### M7+ — Polish
 Streaming (sequential/priority pieces). Super-seeding. SSL torrents. Pluggable storage: mmap, sqlite, S3.
 
 ## Reading order before M0

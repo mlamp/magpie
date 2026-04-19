@@ -18,13 +18,14 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::alerts::{Alert, AlertErrorCode};
 use crate::tracker::{AnnounceEvent, AnnounceRequest, Tracker};
@@ -95,8 +96,12 @@ pub struct AddTorrentRequest {
     pub max_payload: u32,
     /// Whether to advertise BEP 6 Fast extension.
     pub fast_ext: bool,
+    /// Whether to advertise BEP 10 extension protocol support.
+    pub extension_protocol: bool,
     /// Handshake budget per peer.
     pub handshake_timeout: Duration,
+    /// BEP 10 extension handshake timeout per peer.
+    pub extension_handshake_timeout: Duration,
     /// `DiskWriter` op queue capacity (also the upper bound on in-flight
     /// unverified piece buffers).
     pub disk_queue_capacity: usize,
@@ -110,6 +115,14 @@ pub struct AddTorrentRequest {
     /// pieces as already-verified so the seed path can serve them
     /// immediately. Empty vec means "no pre-existing pieces".
     pub initial_have: Vec<bool>,
+    /// Optional raw info dict bytes. When provided, the session stores them
+    /// so it can serve BEP 9 `ut_metadata` Data responses to peers.
+    pub info_dict_bytes: Option<Vec<u8>>,
+    /// Override the BEP 11 outbound PEX round interval. `None` keeps the
+    /// 60 s default ([`crate::session::pex::PEX_INTERVAL`]). Test-only knob:
+    /// integration tests that verify PEX discovery can lower this to keep
+    /// runtime under a few seconds without waiting for a real-world round.
+    pub pex_interval: Option<Duration>,
 }
 
 /// Default per-torrent connected-peer cap. Chosen to comfortably exceed
@@ -140,12 +153,91 @@ impl AddTorrentRequest {
             max_in_flight: DEFAULT_PER_PEER_IN_FLIGHT,
             max_payload: magpie_bt_wire::DEFAULT_MAX_PAYLOAD,
             fast_ext: true,
+            extension_protocol: true,
             handshake_timeout: Duration::from_secs(10),
+            extension_handshake_timeout: crate::session::peer::DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT,
             disk_queue_capacity: crate::session::DEFAULT_DISK_QUEUE_CAPACITY,
             peer_cap: DEFAULT_PER_TORRENT_PEER_CAP,
             initial_have: Vec::new(),
+            info_dict_bytes: None,
+            pex_interval: None,
         }
     }
+}
+
+/// Parsed magnet link fields used by [`AddMagnetRequest`].
+#[derive(Debug, Clone)]
+pub struct MagnetLink {
+    /// v1 info-hash (20 bytes).
+    pub info_hash: [u8; 20],
+    /// Tracker URLs from `tr` parameters.
+    pub trackers: Vec<String>,
+    /// Direct peer addresses from `x.pe` parameters.
+    pub peer_addrs: Vec<SocketAddr>,
+    /// Display name from `dn` parameter.
+    pub display_name: Option<String>,
+}
+
+/// Specification handed to [`Engine::add_magnet`].
+pub struct AddMagnetRequest {
+    /// The parsed magnet link.
+    pub magnet: MagnetLink,
+    /// Storage backend for piece data (used once metadata is known).
+    pub storage: Arc<dyn Storage>,
+    /// Local 20-byte peer id sent in handshakes.
+    pub peer_id: [u8; 20],
+    /// SSRF-resistant filter applied to addresses.
+    pub peer_filter: Arc<dyn PeerFilter>,
+    /// Per-peer in-flight ceiling.
+    pub max_in_flight: u32,
+    /// Per-message wire codec ceiling.
+    pub max_payload: u32,
+    /// Whether to advertise BEP 6 Fast extension.
+    pub fast_ext: bool,
+    /// Whether to advertise BEP 10 extension protocol support.
+    pub extension_protocol: bool,
+    /// Handshake budget per peer.
+    pub handshake_timeout: Duration,
+    /// BEP 10 extension handshake timeout per peer.
+    pub extension_handshake_timeout: Duration,
+    /// `DiskWriter` op queue capacity.
+    pub disk_queue_capacity: usize,
+    /// Per-torrent connected-peer cap.
+    pub peer_cap: usize,
+}
+
+impl AddMagnetRequest {
+    /// Construct with magpie defaults.
+    #[must_use]
+    pub fn new(
+        magnet: MagnetLink,
+        storage: Arc<dyn Storage>,
+        peer_id: [u8; 20],
+    ) -> Self {
+        Self {
+            magnet,
+            storage,
+            peer_id,
+            peer_filter: Arc::new(DefaultPeerFilter::default()),
+            max_in_flight: DEFAULT_PER_PEER_IN_FLIGHT,
+            max_payload: magpie_bt_wire::DEFAULT_MAX_PAYLOAD,
+            fast_ext: true,
+            extension_protocol: true,
+            handshake_timeout: Duration::from_secs(10),
+            extension_handshake_timeout: crate::session::peer::DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT,
+            disk_queue_capacity: crate::session::DEFAULT_DISK_QUEUE_CAPACITY,
+            peer_cap: DEFAULT_PER_TORRENT_PEER_CAP,
+        }
+    }
+}
+
+/// Errors returned from [`Engine::add_magnet`].
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum AddMagnetError {
+    /// The session channel was already closed.
+    #[error("session closed")]
+    SessionClosed,
 }
 
 /// Errors returned from [`Engine::add_torrent`].
@@ -341,6 +433,23 @@ pub struct Engine {
     /// awaiting join don't hang on the infinite refill loop.
     refiller_task: Mutex<Option<JoinHandle<()>>>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    /// Cancellation token signalled by [`Self::join`]. The listener accept
+    /// loop selects on a child of this token so it exits gracefully, giving
+    /// peer tasks time to run cleanup before being aborted.
+    shutdown_token: CancellationToken,
+    /// Bound listen port (BEP 10 `p` field source). Set by [`Self::listen`];
+    /// read in [`Self::attach_stream`] so every outbound and inbound
+    /// extension handshake we send carries the reachable port other peers
+    /// should dial. `0` means "no listener bound" — the field is omitted
+    /// from the handshake.
+    listen_port: AtomicU16,
+    /// Engine-global file-descriptor pool for [`MultiFileStorage`](
+    /// crate::storage::MultiFileStorage) instances. Consumers that construct
+    /// their own storage can share this pool via [`Self::fd_pool`] so all
+    /// torrents in one engine compete for one bounded fd budget, matching
+    /// rakshasa's `FileManager` scope. Unix-only; `None` on other platforms.
+    #[cfg(unix)]
+    fd_pool: Arc<crate::storage::FdPool>,
 }
 
 impl Engine {
@@ -364,7 +473,36 @@ impl Engine {
             shaper,
             refiller_task: Mutex::new(Some(refiller_task)),
             tasks: Mutex::new(Vec::new()),
+            shutdown_token: CancellationToken::new(),
+            listen_port: AtomicU16::new(0),
+            #[cfg(unix)]
+            fd_pool: Arc::new(crate::storage::FdPool::with_default_cap()),
         }
+    }
+
+    /// Override the engine-global [`FdPool`](crate::storage::FdPool) cap.
+    /// Default is [`FdPool::default_cap`](crate::storage::FdPool::default_cap)
+    /// (128). Call before adding any torrents whose storage you'll derive
+    /// from [`Self::fd_pool`]; existing storages keep the pool they were
+    /// constructed with.
+    #[cfg(unix)]
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn with_fd_pool_cap(mut self, cap: usize) -> Self {
+        self.fd_pool = Arc::new(crate::storage::FdPool::with_cap(cap));
+        self
+    }
+
+    /// Engine-global fd pool — hand this to
+    /// [`MultiFileStorage::create_from_info`](
+    /// crate::storage::MultiFileStorage::create_from_info) so all torrents
+    /// added to this engine share one fd budget. Consumers that want an
+    /// isolated pool per torrent can construct their own
+    /// [`FdPool`](crate::storage::FdPool) instead.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn fd_pool(&self) -> Arc<crate::storage::FdPool> {
+        Arc::clone(&self.fd_pool)
     }
 
     /// Override the global connected-peer cap. Default is
@@ -449,18 +587,31 @@ impl Engine {
             peer_to_session_rx,
             disk_tx,
             Arc::clone(&self.read_cache),
+            req.peer_cap,
         );
         if !req.initial_have.is_empty() {
             session.apply_initial_have(&req.initial_have);
+        }
+        let metadata_size = req.info_dict_bytes.as_ref().map(|b| b.len() as u64);
+        if let Some(info_bytes) = req.info_dict_bytes {
+            session.set_info_dict_bytes(info_bytes);
+        }
+        if let Some(interval) = req.pex_interval {
+            session.set_pex_interval(interval);
         }
 
         let handshake_template = PeerConfig {
             peer_id: req.peer_id,
             info_hash: req.info_hash,
             fast_ext: req.fast_ext,
+            extension_protocol: req.extension_protocol,
             max_in_flight: req.max_in_flight,
             max_payload: req.max_payload,
             handshake_timeout: req.handshake_timeout,
+            extension_handshake_timeout: req.extension_handshake_timeout,
+            remote_addr: None,
+            metadata_size,
+            local_listen_port: None, // stamped per-attach in attach_stream
         };
         let entry = TorrentEntry {
             info_hash: req.info_hash,
@@ -501,6 +652,100 @@ impl Engine {
         Ok(id)
     }
 
+    /// Start a torrent from a magnet link. Returns a [`TorrentId`]
+    /// immediately; the metadata exchange runs asynchronously. When the info
+    /// dict has been downloaded and verified, an
+    /// [`Alert::MetadataReceived`] is emitted and the torrent transitions
+    /// to normal downloading.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AddMagnetError::SessionClosed`] if the session fails to
+    /// start (should not happen in practice).
+    pub async fn add_magnet(&self, req: AddMagnetRequest) -> Result<TorrentId, AddMagnetError> {
+        let info_hash = req.magnet.info_hash;
+        tracing::info!(?info_hash, "engine: adding magnet");
+
+        // Create a minimal "placeholder" TorrentParams. The real params will
+        // be set once metadata is downloaded. Use 1 piece to satisfy the
+        // session's constructor — the assembler overrides this on completion.
+        let placeholder_params = TorrentParams {
+            piece_count: 1,
+            piece_length: 16 * 1024,
+            total_length: 16 * 1024,
+            piece_hashes: vec![0u8; 20],
+            private: false,
+        };
+
+        let (disk_writer, disk_tx, disk_metrics) =
+            DiskWriter::new(Arc::clone(&req.storage), req.disk_queue_capacity);
+        let disk_task = tokio::spawn(disk_writer.run());
+
+        let id = TorrentId::new(self.next_torrent_id.fetch_add(1, Ordering::Relaxed));
+
+        let (peer_to_session_tx, peer_to_session_rx) = mpsc::channel(PEER_TO_SESSION_CAPACITY);
+        let (mut session, cmd_tx) = TorrentSession::new(
+            id,
+            placeholder_params,
+            info_hash,
+            Arc::clone(&self.alerts),
+            peer_to_session_rx,
+            disk_tx,
+            Arc::clone(&self.read_cache),
+            req.peer_cap,
+        );
+        // Attach the metadata assembler — this puts the session in
+        // "metadata-fetching" mode.
+        session.set_metadata_assembler(
+            crate::session::metadata_exchange::MetadataAssembler::new(info_hash),
+        );
+
+        let handshake_template = PeerConfig {
+            peer_id: req.peer_id,
+            info_hash,
+            fast_ext: req.fast_ext,
+            extension_protocol: req.extension_protocol,
+            max_in_flight: req.max_in_flight,
+            max_payload: req.max_payload,
+            handshake_timeout: req.handshake_timeout,
+            extension_handshake_timeout: req.extension_handshake_timeout,
+            remote_addr: None,
+            metadata_size: None, // unknown until metadata arrives
+            local_listen_port: None, // stamped per-attach in attach_stream
+        };
+        let entry = TorrentEntry {
+            info_hash,
+            peer_id: req.peer_id,
+            peer_filter: req.peer_filter,
+            peer_to_session_tx,
+            cmd_tx,
+            disk_metrics,
+            handshake_template,
+            total_length: 0, // unknown until metadata arrives
+            active_peer_ids: Arc::new(StdMutex::new(HashSet::new())),
+            peer_count: Arc::new(AtomicUsize::new(0)),
+            peer_cap: req.peer_cap,
+            storage: Arc::clone(&req.storage),
+            torrent_stats: Arc::new(crate::session::stats::PerTorrentStats::new()),
+            live_peer_stats: Arc::new(StdMutex::new(HashMap::new())),
+        };
+
+        let mut torrents = self.torrents.write().await;
+        let mut index = self.info_hash_index.write().await;
+        torrents.insert(id, entry);
+        index.insert(info_hash, id);
+        drop(index);
+        drop(torrents);
+        self.shaper.register_torrent_passthrough(id);
+
+        let session_task = tokio::spawn(async move {
+            let _ = session.run().await;
+        });
+        self.tasks.lock().await.push(disk_task);
+        self.tasks.lock().await.push(session_task);
+        Ok(id)
+    }
+
     /// Connect to `addr`, perform the BEP 3 handshake, and attach the peer
     /// task to the named torrent.
     pub async fn add_peer(
@@ -522,7 +767,7 @@ impl Engine {
                     format!("tcp connect to {addr} timed out"),
                 ))
             })??;
-        self.attach_stream(snapshot, stream, HandshakeRole::Initiator)
+        self.attach_stream(snapshot, stream, HandshakeRole::Initiator, Some(addr))
             .await
     }
 
@@ -551,7 +796,7 @@ impl Engine {
         if !snapshot.peer_filter.allow(peer_addr) {
             return Err(AddPeerError::Filtered(peer_addr));
         }
-        self.attach_stream(snapshot, stream, role).await
+        self.attach_stream(snapshot, stream, role, Some(peer_addr)).await
     }
 
     /// Disk metrics handle for the named torrent.
@@ -635,6 +880,37 @@ impl Engine {
         });
         drop(guard);
         view
+    }
+
+    /// Drain the per-torrent buffer of PEX-discovered peer addresses
+    /// (BEP 11). The session accumulates addresses learnt from inbound
+    /// `ut_pex` messages; consumers (or the M3 PEX integration test)
+    /// call this periodically and feed the survivors into
+    /// [`Engine::add_peer`].
+    ///
+    /// Returns an empty vector when the torrent is private (PEX disabled),
+    /// when no new peers have been discovered since the last drain, or when
+    /// `torrent_id` is not registered. Channel-closed (session torn down)
+    /// also collapses to an empty vector — the caller's correct response
+    /// is the same as "nothing new".
+    pub async fn drain_pex_discovered(&self, torrent_id: TorrentId) -> Vec<SocketAddr> {
+        let cmd_tx = {
+            let guard = self.torrents.read().await;
+            let Some(cmd_tx) = guard.get(&torrent_id).map(|entry| entry.cmd_tx.clone()) else {
+                return Vec::new();
+            };
+            drop(guard);
+            cmd_tx
+        };
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        if cmd_tx
+            .send(SessionCommand::DrainPexDiscovered { reply: reply_tx })
+            .await
+            .is_err()
+        {
+            return Vec::new();
+        }
+        reply_rx.await.unwrap_or_default()
     }
 
     /// Spawn a periodic announce loop against `tracker`.
@@ -811,19 +1087,35 @@ impl Engine {
     /// Wait for every spawned task to complete. Call after shutting down all
     /// torrents. Idempotent.
     ///
-    /// Aborts all tasks before awaiting them. The listener task runs an
-    /// infinite accept loop that never exits on its own; session, disk,
-    /// and peer tasks should have already exited after [`Self::shutdown`]
-    /// but aborting them is harmless (accelerates cleanup).
+    /// Signals the shutdown token so the listener exits its accept loop
+    /// gracefully, then awaits all tasks with a grace period. Peer tasks
+    /// that exit normally run their cleanup path (`retire_peer`,
+    /// `release_peer_id`, `release_peer_slot`), preventing permanent
+    /// `global_peer_count` inflation. Tasks that don't finish within the
+    /// grace period are aborted as a last resort.
     pub async fn join(&self) {
+        self.shutdown_token.cancel();
+
         let refiller_handle = self.refiller_task.lock().await.take();
         if let Some(handle) = refiller_handle {
             handle.abort();
             let _ = handle.await;
         }
+
         let tasks = std::mem::take(&mut *self.tasks.lock().await);
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while tokio::time::Instant::now() < deadline {
+            if tasks.iter().all(JoinHandle::is_finished) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
         for h in &tasks {
-            h.abort();
+            if !h.is_finished() {
+                h.abort();
+            }
         }
         for h in tasks {
             let _ = h.await;
@@ -862,14 +1154,23 @@ impl Engine {
 
     async fn attach_stream<S>(
         &self,
-        snapshot: Snapshot,
+        mut snapshot: Snapshot,
         mut stream: S,
         role: HandshakeRole,
+        peer_addr: Option<SocketAddr>,
     ) -> Result<(), AddPeerError>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let _ = (snapshot.info_hash, snapshot.peer_id); // available for future per-handshake overrides
+        // Set the remote address on the config so PeerConn can pass it
+        // through in PeerToSession::Connected for PEX.
+        snapshot.cfg.remote_addr = peer_addr;
+        // BEP 10 `p`: stamp our listen port (if bound) into the outbound
+        // extension handshake. Lets the remote rewrite our PEX address to
+        // (our_ip, our_listen_port) instead of our outbound source port.
+        let port = self.listen_port.load(Ordering::Relaxed);
+        snapshot.cfg.local_listen_port = (port != 0).then_some(port);
         // Reserve the cap slot *before* the handshake exchange so an over-cap
         // outbound attempt fails fast without sending our handshake bytes.
         reserve_peer_slot(
@@ -1020,22 +1321,40 @@ impl Engine {
         let listener = TcpListener::bind(addr).await?;
         let bound = listener.local_addr()?;
         tracing::info!(%bound, "engine: inbound listener bound");
+        // Record the bound port for the BEP 10 extension handshake `p`
+        // field — every subsequent attach_stream stamps this into the
+        // outgoing handshake so PEX can advertise our reachable address.
+        self.listen_port.store(bound.port(), Ordering::Relaxed);
         let engine = Arc::clone(self);
+        let token = self.shutdown_token.child_token();
         let task = tokio::spawn(async move {
+            let mut handler_tasks: Vec<JoinHandle<()>> = Vec::new();
             loop {
-                match listener.accept().await {
-                    Ok((stream, peer_addr)) => {
-                        let engine = Arc::clone(&engine);
-                        let cfg = cfg.clone();
-                        tokio::spawn(async move {
-                            engine.handle_inbound(stream, peer_addr, cfg).await;
-                        });
+                tokio::select! {
+                    biased;
+                    () = token.cancelled() => {
+                        tracing::info!("engine: listener shutting down");
+                        break;
                     }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "accept failed");
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
+                    result = listener.accept() => match result {
+                        Ok((stream, peer_addr)) => {
+                            let engine = Arc::clone(&engine);
+                            let cfg = cfg.clone();
+                            let h = tokio::spawn(async move {
+                                engine.handle_inbound(stream, peer_addr, cfg).await;
+                            });
+                            handler_tasks.push(h);
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "accept failed");
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                    },
                 }
+            }
+            let grace = Duration::from_secs(10);
+            for h in handler_tasks {
+                let _ = tokio::time::timeout(grace, h).await;
             }
         });
         self.tasks.lock().await.push(task);
@@ -1097,6 +1416,8 @@ impl Engine {
         // spawned peer task — spawn_peer_task takes ownership of both. The
         // exception is the `SessionClosed` path inside `spawn_peer_task`,
         // which releases them itself.
+        let mut snapshot = snapshot;
+        snapshot.cfg.remote_addr = Some(peer_addr);
         if let Err(e) = self.spawn_peer_task(snapshot, stream, remote).await {
             tracing::debug!(%peer_addr, error = %e, "inbound spawn failed");
         }

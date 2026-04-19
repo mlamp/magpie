@@ -44,11 +44,19 @@
 mod block;
 mod codec;
 mod error;
+pub mod extension;
 mod handshake;
 mod message;
+pub mod metadata;
+pub mod pex;
 
 pub use block::{BLOCK_SIZE, Block, BlockRequest};
 pub use codec::{DEFAULT_MAX_PAYLOAD, WireCodec};
 pub use error::WireError;
+pub use extension::{ExtensionError, ExtensionHandshake, ExtensionRegistry, MAX_EXTENSIONS};
 pub use handshake::{HANDSHAKE_LEN, Handshake, PSTR, PSTRLEN};
 pub use message::{Message, id};
+pub use metadata::{
+    MAX_METADATA_SIZE, METADATA_PIECE_SIZE, MetadataError, MetadataMessage, metadata_piece_count,
+};
+pub use pex::{MAX_PEX_PEERS, PexError, PexFlags, PexMessage, PexPeer};

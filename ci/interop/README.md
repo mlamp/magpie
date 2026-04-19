@@ -8,13 +8,19 @@ the handshake / wire / fast-ext level.
 
 - `Dockerfile.magpie` — multi-stage build producing three binaries
   (`magpie-seeder`, `mock_tracker`, `generate_fixture`).
-- `docker-compose.qbittorrent.yml` — scenario: magpie seeds → qBittorrent leeches.
-- `docker-compose.transmission.yml` — scenario: magpie seeds → Transmission leeches.
-- `run.sh {qbittorrent|transmission}` — orchestrator.
-- `gate_qbittorrent.sh` — per-client gate: adds torrent via qBittorrent
-  webUI API, polls completion, SHA-256 verifies the download.
-- `gate_transmission.sh` — per-client gate: adds torrent via Transmission
-  RPC API, polls completion, SHA-256 verifies the download.
+- `docker-compose.qbittorrent.yml` — scenario: magpie seeds → qBittorrent leeches (.torrent file).
+- `docker-compose.transmission.yml` — scenario: magpie seeds → Transmission leeches (.torrent file).
+- `docker-compose.qbittorrent-magnet.yml` — magnet variant: leech bootstraps from
+  `magnet:?xt=...&tr=...`. Seeder runs with `--advertise-metadata` so its BEP 10
+  extension handshake exposes `metadata_size` and serves `ut_metadata` Data
+  responses (BEP 9). Closes M3 gate criterion 3.
+- `docker-compose.transmission-magnet.yml` — magnet variant for Transmission.
+- `run.sh {qbittorrent|transmission|qbittorrent-magnet|transmission-magnet}` — orchestrator.
+- `gate_qbittorrent.sh` / `gate_transmission.sh` — per-client gates that add a
+  `.torrent` file via the client's webUI / RPC API.
+- `gate_qbittorrent_magnet.sh` / `gate_transmission_magnet.sh` — magnet variants
+  that submit `magnet:` URIs and exercise the BEP 9 metadata-fetch path before
+  the data download starts.
 
 ## Image versions
 

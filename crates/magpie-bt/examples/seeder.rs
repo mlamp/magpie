@@ -35,13 +35,16 @@
 //!
 //! ## Scope
 //!
-//! **Single-file v1 only.** `FileStorage` backs one file; multi-file
-//! torrents land with layout-aware storage in a follow-up. Multi-file
-//! inputs are rejected at startup with a clear error.
+//! **v1 only** (single-file or multi-file). Single-file torrents use
+//! [`FileStorage`]; multi-file torrents use [`MultiFileStorage`] (ADR-0021).
+//! Auto-detected from the path type: if `--data` is a file, single-file;
+//! if it's a directory, multi-file (the torrent's file list is laid out
+//! under that root).
 //!
-//! **Unix only.** `FileStorage` relies on `pread`/`pwrite` which the M2
-//! storage backend only supports on Unix. The example is `#[cfg(unix)]`-
-//! gated; Windows builds are a no-op `main` that prints a message.
+//! **Unix only.** Both storage backends rely on `pread`/`pwrite` which
+//! the M2 storage implementations only support on Unix. The example is
+//! `#[cfg(unix)]`-gated; Windows builds are a no-op `main` that prints
+//! a message.
 //!
 //! ## Trust model
 //!
@@ -109,7 +112,7 @@ mod run {
     use magpie_bt::alerts::{AlertCategory, AlertQueue};
     use magpie_bt::engine::AttachTrackerConfig;
     use magpie_bt::peer_filter::DefaultPeerFilter;
-    use magpie_bt::storage::{FileStorage, Storage};
+    use magpie_bt::storage::{FdPool, FileStorage, MultiFileStorage, Storage};
     use magpie_bt::tracker::HttpTracker;
     use magpie_bt::{
         AddTorrentRequest, Engine, FileStatsSink, InfoHash, ListenConfig, PeerIdBuilder,
@@ -118,6 +121,7 @@ mod run {
     use magpie_bt_metainfo::{FileListV1, parse};
 
     #[derive(Debug)]
+    #[allow(clippy::struct_excessive_bools)]
     struct Args {
         torrent: PathBuf,
         data: PathBuf,
@@ -134,6 +138,12 @@ mod run {
         /// sink's batch cadence. Lower values are useful for subprocess
         /// tests that need to see a committed sidecar quickly.
         flush_secs: u64,
+        /// BEP 9 / BEP 10: also advertise `metadata_size` in our
+        /// extension handshake and serve `ut_metadata` Data responses.
+        /// Required for the magnet-flavoured interop scenarios where
+        /// the leecher bootstraps from a magnet URI and pulls metadata
+        /// from us.
+        advertise_metadata: bool,
     }
 
     fn parse_args() -> Result<Args, String> {
@@ -145,6 +155,7 @@ mod run {
         let mut verify = false;
         let mut allow_loopback = false;
         let mut flush_secs: u64 = 30;
+        let mut advertise_metadata = false;
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
             match arg.as_str() {
@@ -159,6 +170,7 @@ mod run {
                 "--announce" => announce = true,
                 "--verify" => verify = true,
                 "--allow-loopback" => allow_loopback = true,
+                "--advertise-metadata" => advertise_metadata = true,
                 "--flush-secs" => {
                     flush_secs = iter
                         .next()
@@ -179,13 +191,14 @@ mod run {
             verify,
             allow_loopback,
             flush_secs,
+            advertise_metadata,
         })
     }
 
     fn usage() -> String {
         "usage: seeder --torrent <FILE.torrent> --data <FILE> \
          [--listen <ADDR>] [--stats-dir <DIR>] [--announce] [--verify] \
-         [--allow-loopback] [--flush-secs <N>]"
+         [--allow-loopback] [--flush-secs <N>] [--advertise-metadata]"
             .into()
     }
 
@@ -241,24 +254,40 @@ mod run {
         let v1 = meta.info.v1.as_ref().ok_or("torrent has no v1 info dict")?;
         let total_length = match &v1.files {
             FileListV1::Single { length } => *length,
-            FileListV1::Multi { .. } => {
-                return Err(
-                    "multi-file torrents not supported — FileStorage backs a single file".into(),
-                );
-            }
+            FileListV1::Multi { files } => files.iter().map(|f| f.length).sum(),
         };
+        let is_multi = matches!(v1.files, FileListV1::Multi { .. });
         let piece_length = meta.info.piece_length;
         let piece_count =
             u32::try_from(v1.pieces.len() / 20).map_err(|_| "piece count overflow")?;
 
-        // --- sanity: data file length matches ---------------------------
-        let data_meta = std::fs::metadata(&args.data).map_err(|e| format!("stat --data: {e}"))?;
-        if data_meta.len() != total_length {
-            return Err(format!(
-                "--data length {} does not match torrent total {} — refusing to serve",
-                data_meta.len(),
-                total_length
-            ));
+        // --- sanity: data length matches ---------------------------------
+        // Single-file: `--data` points at the file, lengths must match.
+        // Multi-file: `--data` points at a directory; per-file size check
+        // is delegated to MultiFileStorage::open_from_info.
+        let data_meta =
+            std::fs::metadata(&args.data).map_err(|e| format!("stat --data: {e}"))?;
+        if is_multi {
+            if !data_meta.is_dir() {
+                return Err(format!(
+                    "--data {} is not a directory (multi-file torrent expects a dir)",
+                    args.data.display()
+                ));
+            }
+        } else {
+            if data_meta.is_dir() {
+                return Err(format!(
+                    "--data {} is a directory (single-file torrent expects a file)",
+                    args.data.display()
+                ));
+            }
+            if data_meta.len() != total_length {
+                return Err(format!(
+                    "--data length {} does not match torrent total {} — refusing to serve",
+                    data_meta.len(),
+                    total_length
+                ));
+            }
         }
 
         eprintln!(
@@ -278,8 +307,17 @@ mod run {
         );
 
         // --- storage + (optional) verify --------------------------------
-        let storage =
-            Arc::new(FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?);
+        let storage: Arc<dyn Storage> = if is_multi {
+            let pool = Arc::new(FdPool::with_default_cap());
+            Arc::new(
+                MultiFileStorage::open_from_info(&args.data, &meta.info, pool)
+                    .map_err(|e| format!("open multi-file --data: {e}"))?,
+            )
+        } else {
+            Arc::new(
+                FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?,
+            )
+        };
         if args.verify {
             use magpie_bt_metainfo::sha1;
             eprintln!("verifying {piece_count} pieces...");
@@ -329,6 +367,13 @@ mod run {
         };
         req.peer_filter = Arc::clone(&filter);
         req.initial_have = vec![true; piece_count as usize];
+        if args.advertise_metadata {
+            // BEP 9: hand the raw info-dict bytes to the session so we can
+            // serve ut_metadata Data responses and advertise metadata_size
+            // in our extension handshake. Magnet leechers bootstrap from
+            // this without ever needing the .torrent file.
+            req.info_dict_bytes = Some(meta.info_bytes.to_vec());
+        }
         let torrent_id = engine
             .add_torrent(req)
             .await

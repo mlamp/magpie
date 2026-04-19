@@ -39,4 +39,10 @@ pub enum StorageErrorKind {
     /// The underlying I/O layer returned an error.
     #[error("I/O: {0}")]
     Io(#[from] std::io::Error),
+    /// A file path in a multi-file storage layout failed validation —
+    /// e.g. contains `..`, is absolute, has an empty component, duplicates
+    /// another entry, or would escape the download root via a symlink.
+    /// Reported at construction time before any fd is opened.
+    #[error("path: {0}")]
+    Path(String),
 }

@@ -68,6 +68,14 @@ pub enum Alert {
     /// the engine API for per-torrent counters; this alert is purely a
     /// notification that new data is available.
     StatsUpdate,
+    /// BEP 9: metadata exchange completed — the info dict has been
+    /// downloaded, verified (SHA-1 matches the info hash), and parsed
+    /// into `TorrentParams`. The torrent has transitioned from
+    /// metadata-fetching to normal downloading.
+    MetadataReceived {
+        /// Which torrent received its metadata.
+        torrent: TorrentId,
+    },
 }
 
 // Compile-time size guard — keep alerts small for the ring (ADR-0002).
@@ -78,7 +86,9 @@ impl Alert {
     #[must_use]
     pub const fn category(&self) -> AlertCategory {
         match self {
-            Self::PieceCompleted { .. } | Self::TorrentComplete { .. } => AlertCategory::PIECE,
+            Self::PieceCompleted { .. }
+            | Self::TorrentComplete { .. }
+            | Self::MetadataReceived { .. } => AlertCategory::PIECE,
             Self::PeerConnected { .. } | Self::PeerDisconnected { .. } => AlertCategory::PEER,
             Self::TrackerResponse { .. } => AlertCategory::TRACKER,
             Self::Error { .. } => AlertCategory::ERROR,
@@ -101,6 +111,8 @@ pub enum AlertErrorCode {
     PeerProtocol,
     /// Hash verification of a piece failed.
     HashMismatch,
+    /// BEP 9 metadata verification failed too many times — giving up.
+    MetadataVerifyExhausted,
 }
 
 /// Bit-flag set selecting alert categories.

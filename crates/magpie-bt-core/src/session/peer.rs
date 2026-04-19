@@ -1,18 +1,19 @@
 //! Per-peer task: owns a framed wire connection and shuttles messages between
 //! the wire and the torrent actor.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use magpie_bt_wire::{
-    Block, BlockRequest, HANDSHAKE_LEN, Handshake, Message, WireCodec, WireError,
+    Block, BlockRequest, ExtensionHandshake, ExtensionRegistry, HANDSHAKE_LEN, Handshake, Message,
+    WireCodec, WireError,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_util::codec::Framed;
-
 use crate::session::messages::{DisconnectReason, PeerSlot, PeerToSession, SessionToPeer};
 
 /// Default per-peer in-flight request ceiling. Single source of truth — the
@@ -23,6 +24,13 @@ pub const DEFAULT_PER_PEER_IN_FLIGHT: u32 = 4;
 /// Default handshake budget (S17). Defends against slow-loris peers that
 /// dribble the 68 handshake bytes one byte at a time.
 pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Default extension handshake timeout.
+pub const DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Maximum allowed extension message payload size (1 MiB). Messages exceeding
+/// this are silently dropped with a debug log.
+const MAX_EXTENSION_PAYLOAD: usize = 1_048_576;
 
 /// Bounded inbox capacity for `PeerToSession`.
 ///
@@ -51,6 +59,8 @@ pub struct PeerConfig {
     pub info_hash: [u8; 20],
     /// Whether to advertise BEP 6 Fast extension support.
     pub fast_ext: bool,
+    /// Whether to advertise BEP 10 extension protocol support.
+    pub extension_protocol: bool,
     /// Maximum requests we keep in-flight on this peer at once.
     pub max_in_flight: u32,
     /// `WireCodec` ceiling — sized by the session once the bitfield length is
@@ -58,6 +68,21 @@ pub struct PeerConfig {
     pub max_payload: u32,
     /// Maximum time to spend on the BEP 3 handshake exchange.
     pub handshake_timeout: Duration,
+    /// Maximum time to wait for the peer's BEP 10 extension handshake.
+    pub extension_handshake_timeout: Duration,
+    /// Remote socket address, if known. Passed through to the session in
+    /// `PeerToSession::Connected` for PEX.
+    pub remote_addr: Option<std::net::SocketAddr>,
+    /// BEP 9: size of the info dict in bytes, included in the BEP 10
+    /// extension handshake so peers know our metadata size. `None` for
+    /// magnet-link torrents that haven't fetched metadata yet.
+    pub metadata_size: Option<u64>,
+    /// BEP 10 `p` field: our TCP listen port, advertised in the extension
+    /// handshake so peers know which port to dial back on (and so the
+    /// remote's PEX rounds can advertise us with our reachable address
+    /// rather than our outbound source port). `None` if we are not
+    /// listening for inbound peers.
+    pub local_listen_port: Option<u16>,
 }
 
 impl Default for PeerConfig {
@@ -66,9 +91,14 @@ impl Default for PeerConfig {
             peer_id: [0; 20],
             info_hash: [0; 20],
             fast_ext: true,
+            extension_protocol: true,
             max_in_flight: DEFAULT_PER_PEER_IN_FLIGHT,
             max_payload: magpie_bt_wire::DEFAULT_MAX_PAYLOAD,
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
+            extension_handshake_timeout: DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT,
+            remote_addr: None,
+            metadata_size: None,
+            local_listen_port: None,
         }
     }
 }
@@ -213,6 +243,9 @@ where
     if config.fast_ext {
         local = local.with_fast_ext();
     }
+    if config.extension_protocol {
+        local = local.with_extension_protocol();
+    }
     let local_bytes = local.to_bytes();
     stream.write_all(&local_bytes).await?;
     Ok(())
@@ -250,6 +283,10 @@ where
     /// `add_uploaded`/`add_downloaded` on the hot path are lock-free.
     /// `None` for tests that don't track stats.
     peer_stats: Option<Arc<crate::session::stats::PeerStats>>,
+    /// Per-peer extension ID registry (BEP 10). Populated after the
+    /// extension handshake exchange; `None` if the peer doesn't support
+    /// extensions.
+    extension_registry: Option<ExtensionRegistry>,
 }
 
 impl<S> PeerConn<S>
@@ -279,6 +316,7 @@ where
             am_interested: false,
             shaper_buckets: None,
             peer_stats: None,
+            extension_registry: None,
         }
     }
 
@@ -323,12 +361,21 @@ where
                 slot: self.slot,
                 peer_id: peer_handshake.peer_id,
                 supports_fast: peer_handshake.supports_fast_ext(),
+                addr: self.config.remote_addr,
             })
             .await
             .is_err()
         {
             // Session is gone before we even reported in. Nothing to do.
             return;
+        }
+
+        // BEP 10: exchange extension handshakes if both sides support it.
+        if self.config.extension_protocol
+            && peer_handshake.supports_extension_protocol()
+            && let Err(e) = self.exchange_extension_handshake().await
+        {
+            tracing::debug!(error = %e, "extension handshake failed; continuing without extensions");
         }
 
         let reason = self.message_loop().await;
@@ -344,6 +391,78 @@ where
             .await;
     }
 
+    /// BEP 10: send our extension handshake and wait (with timeout) for the
+    /// peer's response. Lenient: if the first message received is not an
+    /// extension handshake, we skip extension support and feed the message
+    /// back into normal handling.
+    async fn exchange_extension_handshake(&mut self) -> Result<(), String> {
+        // Build local extension ID assignments.
+        let local: HashMap<String, u8> = [
+            ("ut_metadata".to_owned(), 1u8),
+            ("ut_pex".to_owned(), 2u8),
+        ]
+        .into_iter()
+        .collect();
+        let mut registry = ExtensionRegistry::new(local);
+
+        // Encode and send our handshake.
+        let mut hs = registry.our_handshake();
+        hs.metadata_size = self.config.metadata_size;
+        hs.listen_port = self.config.local_listen_port;
+        let payload = Bytes::from(hs.encode());
+        self.framed
+            .send(Message::Extended { id: 0, payload })
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Wait for the peer's extension handshake with a configurable timeout.
+        let timeout = self.config.extension_handshake_timeout;
+        let maybe_msg = tokio::time::timeout(timeout, self.framed.next()).await;
+
+        match maybe_msg {
+            Ok(Some(Ok(Message::Extended { id: 0, payload }))) => {
+                let peer_hs = ExtensionHandshake::decode(&payload)
+                    .map_err(|e| e.to_string())?;
+                registry.set_remote(&peer_hs);
+                let extensions = peer_hs.extensions.clone();
+                let metadata_size = peer_hs.metadata_size;
+                let client = peer_hs.client.clone();
+                let listen_port = peer_hs.listen_port;
+                self.extension_registry = Some(registry);
+
+                // Report to the session.
+                let _ = self
+                    .tx_to_session
+                    .send(PeerToSession::ExtensionHandshake {
+                        slot: self.slot,
+                        extensions,
+                        metadata_size,
+                        client,
+                        listen_port,
+                    })
+                    .await;
+                Ok(())
+            }
+            Ok(Some(Ok(other_msg))) => {
+                // Peer sent something else first — store the registry without
+                // remote mappings and process the message normally.
+                self.extension_registry = Some(registry);
+                if let Err(reason) = self.handle_inbound(other_msg).await {
+                    return Err(format!("{reason:?}"));
+                }
+                Ok(())
+            }
+            Ok(Some(Err(e))) => Err(e.to_string()),
+            Ok(None) => Err("peer closed connection".to_owned()),
+            Err(_) => {
+                // Timeout — continue without extensions.
+                self.extension_registry = Some(registry);
+                Ok(())
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
     async fn message_loop(&mut self) -> DisconnectReason {
         loop {
             tokio::select! {
@@ -428,6 +547,26 @@ where
                         // counted as bytes-sent.
                         if let Some(s) = self.peer_stats.as_ref() {
                             s.add_uploaded(bytes);
+                        }
+                    }
+                    Some(SessionToPeer::SendExtended { extension_name, payload }) => {
+                        if let Some(ref registry) = self.extension_registry {
+                            if let Some(remote_id) = registry.remote_id(&extension_name) {
+                                let msg = Message::Extended { id: remote_id, payload };
+                                if let Err(e) = self.framed.send(msg).await {
+                                    return io_or_protocol(e);
+                                }
+                            } else {
+                                tracing::debug!(
+                                    extension = %extension_name,
+                                    "peer does not support extension; dropping SendExtended"
+                                );
+                            }
+                        } else {
+                            tracing::debug!(
+                                extension = %extension_name,
+                                "no extension registry; dropping SendExtended"
+                            );
                         }
                     }
                     Some(SessionToPeer::RejectRequest(req)) => {
@@ -527,10 +666,46 @@ where
                     req,
                 }
             }
-            // BEP 6 hints (SuggestPiece, AllowedFast) and BEP 10 Extended are
-            // accepted but not yet wired into the picker. `Message` is
-            // `#[non_exhaustive]`, so the trailing wildcard absorbs any future
-            // variants without breaking the connection.
+            Message::Extended { id, payload } => {
+                // MAJOR #3: reject oversized extension payloads.
+                if payload.len() > MAX_EXTENSION_PAYLOAD {
+                    tracing::debug!(
+                        len = payload.len(),
+                        max = MAX_EXTENSION_PAYLOAD,
+                        "dropping oversized extension message"
+                    );
+                    return Ok(());
+                }
+                if id == 0 {
+                    // Late extension handshake — some peers send it after other
+                    // messages. Just update the registry if we have one.
+                    if let Some(ref mut registry) = self.extension_registry
+                        && let Ok(hs) = ExtensionHandshake::decode(&payload)
+                    {
+                        registry.set_remote(&hs);
+                    }
+                    return Ok(());
+                }
+                // Look up the canonical name for this extension ID.
+                // The peer sent us a message using OUR local ID.
+                if let Some(ref registry) = self.extension_registry
+                    && let Some(extension_name) = registry.local_name_for_id(id)
+                {
+                    self.tx_to_session
+                        .send(PeerToSession::ExtensionMessage {
+                            slot: self.slot,
+                            extension_name: extension_name.to_owned(),
+                            payload,
+                        })
+                        .await
+                        .map_err(|_| DisconnectReason::Shutdown)?;
+                }
+                return Ok(());
+            }
+            // BEP 6 hints (SuggestPiece, AllowedFast) are accepted but not yet
+            // wired into the picker. `Message` is `#[non_exhaustive]`, so the
+            // trailing wildcard absorbs any future variants without breaking the
+            // connection.
             _ => return Ok(()),
         };
         if self.tx_to_session.send(event).await.is_err() {

@@ -4,6 +4,7 @@
 //! peer registry. All peer tasks talk to it over `mpsc`.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -16,6 +17,7 @@ use crate::picker::Picker;
 use crate::session::disk::{DiskCompletion, DiskError, DiskOp};
 use crate::session::messages::{PeerSlot, PeerToSession, SessionCommand, SessionToPeer};
 use crate::session::peer::DEFAULT_PER_PEER_IN_FLIGHT;
+use crate::session::pex::PexState;
 use crate::session::read_cache::ReadCache;
 
 /// Static configuration of a single torrent that the session needs to run.
@@ -194,6 +196,12 @@ struct PeerState {
     /// Whether the peer supports BEP 6 Fast Extension (negotiated in
     /// handshake); controls whether we can send `RejectRequest`.
     supports_fast: bool,
+    /// Remote socket address, if known. Used for outbound PEX.
+    addr: Option<SocketAddr>,
+    /// Whether the peer announced `HaveAll` during the initial exchange.
+    /// Tracked so that after a metadata-transition (magnet-link path) we
+    /// can re-expand the bitfield to the correct piece count.
+    announced_have_all: bool,
 }
 
 impl PeerState {
@@ -208,6 +216,8 @@ impl PeerState {
             peer_interested: false,
             we_choking: true,
             supports_fast: false,
+            addr: None,
+            announced_have_all: false,
         }
     }
 
@@ -264,6 +274,30 @@ pub struct TorrentSession {
     /// alive so resume is cheap. Toggled by [`SessionCommand::Pause`] and
     /// [`SessionCommand::Resume`].
     paused: bool,
+    /// BEP 9 metadata assembler for magnet-link torrents. `Some` while we
+    /// are still fetching the info dict; `None` for normal torrents.
+    metadata_assembler: Option<crate::session::metadata_exchange::MetadataAssembler>,
+    /// Raw info dict bytes, stored after successful metadata assembly or
+    /// when the torrent was added via `add_torrent()`. Used to serve
+    /// `ut_metadata` Data requests to peers.
+    info_dict_bytes: Option<Vec<u8>>,
+    /// Number of consecutive metadata verification failures (hash mismatch
+    /// or parse error). After exceeding the limit we stop retrying to avoid
+    /// infinite loops from persistently malicious peers.
+    metadata_verify_failures: u32,
+    /// BEP 11 Peer Exchange state.
+    pex: PexState,
+    /// Addresses discovered via inbound PEX messages, buffered until the
+    /// engine drains them via [`TorrentSession::drain_pex_discovered`].
+    pex_discovered: Vec<SocketAddr>,
+    /// Outbound PEX round interval. Defaults to
+    /// [`crate::session::pex::PEX_INTERVAL`] (60 s); overridable via
+    /// [`TorrentSession::set_pex_interval`] for tests that need a faster
+    /// round than real-world peer exchange.
+    pex_interval: std::time::Duration,
+    /// Per-torrent connected-peer cap. Used to limit how many PEX-discovered
+    /// addresses we buffer (no point discovering peers we cannot connect to).
+    peer_cap: usize,
 }
 
 /// Default capacity for the [`SessionCommand`] channel returned by
@@ -280,6 +314,7 @@ impl TorrentSession {
     /// `info_hash` is used to key the read cache; `read_cache` should be the
     /// session-global cache instance shared across all torrents.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         torrent_id: TorrentId,
         params: TorrentParams,
@@ -288,12 +323,14 @@ impl TorrentSession {
         rx: mpsc::Receiver<PeerToSession>,
         disk_tx: mpsc::Sender<DiskOp>,
         read_cache: Arc<ReadCache>,
+        peer_cap: usize,
     ) -> (Self, mpsc::Sender<SessionCommand>) {
         // Unbounded (D1): outstanding completions are naturally capped by the
         // disk-op queue. Bounding both legs deadlocks the actor↔writer pair.
         let (completion_tx, completion_rx) = mpsc::unbounded_channel();
         let (cmd_tx, cmd_rx) = mpsc::channel(SESSION_COMMAND_CAPACITY);
         let picker = Picker::new(params.piece_count);
+        let pex = PexState::new(params.private);
         let session = Self {
             torrent_id,
             params,
@@ -311,8 +348,29 @@ impl TorrentSession {
             completion_rx,
             state: TorrentState::Downloading,
             paused: false,
+            metadata_assembler: None,
+            info_dict_bytes: None,
+            metadata_verify_failures: 0,
+            pex,
+            pex_discovered: Vec::new(),
+            pex_interval: crate::session::pex::PEX_INTERVAL,
+            peer_cap,
         };
         (session, cmd_tx)
+    }
+
+    /// Attach a metadata assembler, turning this session into a
+    /// "metadata-fetching" session (magnet-link path).
+    pub fn set_metadata_assembler(
+        &mut self,
+        assembler: crate::session::metadata_exchange::MetadataAssembler,
+    ) {
+        self.metadata_assembler = Some(assembler);
+    }
+
+    /// Store the raw info dict bytes so we can serve `ut_metadata` requests.
+    pub fn set_info_dict_bytes(&mut self, bytes: Vec<u8>) {
+        self.info_dict_bytes = Some(bytes);
     }
 
     /// Register a new peer with an explicit `max_in_flight` ceiling. Returns
@@ -366,6 +424,18 @@ impl TorrentSession {
         self.register_peer_with(slot, tx, DEFAULT_PER_PEER_IN_FLIGHT, false)
     }
 
+    /// Drain buffered PEX-discovered peer addresses. The engine calls this
+    /// periodically and feeds the returned addresses into `add_peer`.
+    pub fn drain_pex_discovered(&mut self) -> Vec<SocketAddr> {
+        std::mem::take(&mut self.pex_discovered)
+    }
+
+    /// Override the outbound PEX round interval (default 60 s). Test-only
+    /// knob exposed to keep the M3 PEX-discovery integration test bounded.
+    pub const fn set_pex_interval(&mut self, interval: std::time::Duration) {
+        self.pex_interval = interval;
+    }
+
     /// Mark the listed pieces as already-verified. Used by resume-from-disk
     /// and seed-mode tests so the actor can answer `BlockRequested`
     /// immediately without first leeching the piece.
@@ -410,6 +480,9 @@ impl TorrentSession {
         // M2: stay in the loop while Downloading OR Completed — a completed
         // torrent still needs to serve inbound block requests (seed mode).
         // Exit only on explicit Shutdown or channel close.
+        let mut pex_interval = tokio::time::interval(self.pex_interval);
+        // Don't fire immediately on start — wait for the first interval.
+        pex_interval.reset();
         loop {
             // Biased: cmd_rx first so RegisterPeer is always processed
             // before any peer messages on rx (spawn_peer awaits
@@ -424,6 +497,10 @@ impl TorrentSession {
                     }
                     Some(SessionCommand::Pause) => self.set_paused(true),
                     Some(SessionCommand::Resume) => self.set_paused(false),
+                    Some(SessionCommand::DrainPexDiscovered { reply }) => {
+                        let drained = self.drain_pex_discovered();
+                        let _ = reply.send(drained);
+                    }
                 },
                 completion = self.completion_rx.recv() => match completion {
                     None => break,
@@ -432,6 +509,9 @@ impl TorrentSession {
                 msg = self.rx.recv() => match msg {
                     None => break,
                     Some(m) => self.handle(m).await,
+                },
+                _ = pex_interval.tick() => {
+                    self.send_pex_round();
                 },
             }
             // Only the leech path schedules requests outbound, and never
@@ -492,11 +572,13 @@ impl TorrentSession {
             PeerToSession::Connected {
                 slot,
                 supports_fast,
+                addr,
                 ..
             } => {
                 tracing::debug!(slot = slot.0, supports_fast, "peer connected");
                 if let Some(p) = self.peers.get_mut(&slot) {
                     p.supports_fast = supports_fast;
+                    p.addr = addr;
                 }
                 // Note: the initial Bitfield advert is sent by
                 // `register_peer_with` to dodge a Connected-before-Register
@@ -511,6 +593,7 @@ impl TorrentSession {
                     // Release any blocks claimed by this peer.
                     self.release_claims(slot);
                 }
+                self.pex.peer_disconnected(slot);
                 self.alerts.push(Alert::PeerDisconnected { torrent: self.torrent_id, peer: slot });
             }
             PeerToSession::Choked { slot } => {
@@ -564,6 +647,7 @@ impl TorrentSession {
                 if let Some(p) = self.peers.get_mut(&slot) {
                     self.picker.forget_peer_bitfield(&p.have);
                     p.have = vec![true; self.params.piece_count as usize];
+                    p.announced_have_all = true;
                     self.picker.observe_peer_bitfield(&p.have);
                 } else {
                     tracing::warn!(slot = slot.0, "HaveAll for unknown peer — biased select invariant violated?");
@@ -606,6 +690,30 @@ impl TorrentSession {
                     offset = req.offset,
                     "peer cancelled request (tracked pre-PeerUploadQueue wiring)"
                 );
+            }
+            PeerToSession::ExtensionHandshake {
+                slot,
+                ref extensions,
+                metadata_size,
+                ref client,
+                listen_port,
+            } => {
+                tracing::debug!(
+                    slot = slot.0,
+                    ?extensions,
+                    ?metadata_size,
+                    ?client,
+                    ?listen_port,
+                    "peer extension handshake"
+                );
+                self.handle_extension_handshake(slot, extensions, metadata_size, listen_port);
+            }
+            PeerToSession::ExtensionMessage {
+                slot,
+                ref extension_name,
+                ref payload,
+            } => {
+                self.handle_extension_message(slot, extension_name, payload);
             }
         }
     }
@@ -788,6 +896,353 @@ impl TorrentSession {
                 }
             }
         });
+    }
+
+    // --- BEP 9 / BEP 10 extension protocol handlers --------------------------
+
+    fn handle_extension_handshake(
+        &mut self,
+        slot: PeerSlot,
+        extensions: &HashMap<String, u8>,
+        metadata_size: Option<u64>,
+        listen_port: Option<u16>,
+    ) {
+        // If we have a metadata assembler (magnet-link path), learn the
+        // metadata_size and start requesting pieces from this peer.
+        if let Some(size) = metadata_size
+            && let Some(assembler) = &mut self.metadata_assembler
+        {
+            assembler.set_total_size(size);
+        }
+        // BEP 11 reachability: rewrite the peer's address to (remote_ip,
+        // their_listen_port) when the BEP 10 `p` field is present. This is
+        // what PEX rounds advertise — without it, inbound peers' source
+        // ports (ephemeral) leak into PEX and other peers can't dial back.
+        if let Some(port) = listen_port
+            && let Some(peer) = self.peers.get_mut(&slot)
+            && let Some(current) = peer.addr
+        {
+            peer.addr = Some(SocketAddr::new(current.ip(), port));
+        }
+        // Check if the peer advertised ut_metadata and remember the id
+        // so we can route extension messages and send requests.
+        let _ut_metadata_supported = extensions.contains_key("ut_metadata");
+        self.request_metadata_from_peer(slot);
+    }
+
+    fn handle_extension_message(
+        &mut self,
+        slot: PeerSlot,
+        extension_name: &str,
+        payload: &[u8],
+    ) {
+        match extension_name {
+            "ut_metadata" => {
+                self.handle_ut_metadata(slot, payload);
+            }
+            "ut_pex" => {
+                self.handle_pex_inbound(slot, payload);
+            }
+            other => {
+                tracing::debug!(
+                    slot = slot.0,
+                    extension = other,
+                    "unknown extension message — ignoring"
+                );
+            }
+        }
+    }
+
+    fn handle_ut_metadata(&mut self, slot: PeerSlot, payload: &[u8]) {
+        use magpie_bt_wire::MetadataMessage;
+
+        let msg = match MetadataMessage::decode(payload) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(slot = slot.0, error = %e, "bad ut_metadata message");
+                return;
+            }
+        };
+
+        match msg {
+            MetadataMessage::Data {
+                piece,
+                total_size,
+                data,
+            } => {
+                // Set total_size if the assembler hasn't seen it yet
+                if let Some(assembler) = &mut self.metadata_assembler {
+                    assembler.set_total_size(total_size);
+                    if let Err(e) = assembler.receive_piece(piece, data) {
+                        tracing::debug!(piece, error = %e, "metadata piece receive failed");
+                        return;
+                    }
+                    if assembler.is_complete() {
+                        self.try_complete_metadata();
+                    }
+                }
+            }
+            MetadataMessage::Reject { piece } => {
+                if let Some(assembler) = &mut self.metadata_assembler {
+                    assembler.receive_reject(piece);
+                }
+                // Try requesting from another peer
+                self.request_metadata_from_any_peer();
+            }
+            MetadataMessage::Request { piece } => {
+                // Serve metadata if we have it
+                self.serve_metadata_piece(slot, piece);
+            }
+        }
+    }
+
+    /// Send `ut_metadata` request messages to a peer for pieces we still need.
+    fn request_metadata_from_peer(&mut self, slot: PeerSlot) {
+        let Some(assembler) = &mut self.metadata_assembler else {
+            return;
+        };
+        if !assembler.has_size() {
+            return;
+        }
+        // Request up to a few pieces from this peer
+        let mut requested = 0;
+        while requested < 4 {
+            let Some(piece) = assembler.next_needed_piece() else {
+                break;
+            };
+            assembler.mark_pending(piece, slot);
+            let msg = magpie_bt_wire::MetadataMessage::Request { piece };
+            let payload = msg.encode();
+            if let Some(peer) = self.peers.get(&slot) {
+                let _ = peer.tx.send(SessionToPeer::SendExtended {
+                    extension_name: "ut_metadata".to_owned(),
+                    payload: payload.into(),
+                });
+            }
+            requested += 1;
+        }
+    }
+
+    /// Try requesting metadata pieces from any peer that supports `ut_metadata`.
+    fn request_metadata_from_any_peer(&mut self) {
+        let slots: Vec<PeerSlot> = self.peers.keys().copied().collect();
+        for slot in slots {
+            if self.metadata_assembler.as_ref().is_none_or(|a| a.next_needed_piece().is_none()) {
+                break;
+            }
+            self.request_metadata_from_peer(slot);
+        }
+    }
+
+    /// Attempt to assemble and verify the metadata, then transition to
+    /// a normal downloading session.
+    fn try_complete_metadata(&mut self) {
+        let Some(assembler) = &self.metadata_assembler else {
+            return;
+        };
+        match assembler.verify_and_parse() {
+            Ok((info_bytes, params)) => {
+                tracing::info!("metadata assembly complete — transitioning to download");
+                self.info_dict_bytes = Some(info_bytes);
+                // Store the new params
+                self.params = params;
+                // Re-init the picker for the real piece count
+                self.picker = Picker::new(self.params.piece_count);
+                // Clear the assembler
+                self.metadata_assembler = None;
+                // Emit alert
+                self.alerts.push(Alert::MetadataReceived {
+                    torrent: self.torrent_id,
+                });
+                // Now we can start requesting real pieces from peers.
+                // Update peer bitfield vectors to match new piece_count.
+                // Peers that announced HaveAll get all-true; others start
+                // at all-false and will re-announce via Have messages.
+                let pc = self.params.piece_count as usize;
+                for peer in self.peers.values_mut() {
+                    if peer.announced_have_all {
+                        peer.have = vec![true; pc];
+                        self.picker.observe_peer_bitfield(&peer.have);
+                    } else {
+                        peer.have = vec![false; pc];
+                    }
+                }
+                // Express interest in peers that have pieces we need.
+                let slots: Vec<PeerSlot> = self.peers.keys().copied().collect();
+                for slot in slots {
+                    self.maybe_express_interest(slot);
+                }
+            }
+            Err(e) => {
+                self.metadata_verify_failures += 1;
+                if self.metadata_verify_failures > 3 {
+                    tracing::error!(
+                        failures = self.metadata_verify_failures,
+                        error = %e,
+                        "metadata verification failed too many times — giving up"
+                    );
+                    self.metadata_assembler = None;
+                    self.alerts.push(Alert::Error {
+                        torrent: self.torrent_id,
+                        code: AlertErrorCode::MetadataVerifyExhausted,
+                    });
+                    return;
+                }
+                tracing::warn!(
+                    attempt = self.metadata_verify_failures,
+                    error = %e,
+                    "metadata verification failed — retrying"
+                );
+                // Clear assembler state and retry
+                if let Some(assembler) = &mut self.metadata_assembler {
+                    let info_hash = self.info_hash;
+                    let total_size = assembler.total_size();
+                    *assembler = crate::session::metadata_exchange::MetadataAssembler::new(info_hash);
+                    if let Some(size) = total_size {
+                        assembler.set_total_size(size);
+                    }
+                }
+                self.request_metadata_from_any_peer();
+            }
+        }
+    }
+
+    /// Serve a metadata piece to a peer that requested it.
+    #[allow(clippy::cast_possible_truncation)]
+    fn serve_metadata_piece(&self, slot: PeerSlot, piece: u32) {
+        let Some(info_bytes) = &self.info_dict_bytes else {
+            // We don't have metadata to serve; send Reject.
+            self.send_metadata_reject(slot, piece);
+            return;
+        };
+        // Reject out-of-bounds piece indices before doing any arithmetic.
+        let max_pieces = magpie_bt_wire::metadata_piece_count(info_bytes.len() as u64);
+        if piece >= max_pieces {
+            self.send_metadata_reject(slot, piece);
+            return;
+        }
+        let total_size = info_bytes.len() as u64;
+        let start = piece as usize * magpie_bt_wire::METADATA_PIECE_SIZE;
+        if start >= info_bytes.len() {
+            // Out of range — send Reject
+            self.send_metadata_reject(slot, piece);
+            return;
+        }
+        let end = (start + magpie_bt_wire::METADATA_PIECE_SIZE).min(info_bytes.len());
+        let data = Bytes::copy_from_slice(&info_bytes[start..end]);
+        let msg = magpie_bt_wire::MetadataMessage::Data {
+            piece,
+            total_size,
+            data,
+        };
+        if let Some(peer) = self.peers.get(&slot) {
+            let _ = peer.tx.send(SessionToPeer::SendExtended {
+                extension_name: "ut_metadata".to_owned(),
+                payload: msg.encode().into(),
+            });
+        }
+    }
+
+    fn send_metadata_reject(&self, slot: PeerSlot, piece: u32) {
+        if let Some(peer) = self.peers.get(&slot) {
+            let msg = magpie_bt_wire::MetadataMessage::Reject { piece };
+            let _ = peer.tx.send(SessionToPeer::SendExtended {
+                extension_name: "ut_metadata".to_owned(),
+                payload: msg.encode().into(),
+            });
+        }
+    }
+
+    // ---- BEP 11 PEX ----
+
+    /// Handle an inbound PEX message: decode, rate-limit, cap-check, and
+    /// buffer discovered peers for the engine to drain via
+    /// [`drain_pex_discovered`](Self::drain_pex_discovered).
+    fn handle_pex_inbound(&mut self, slot: PeerSlot, payload: &[u8]) {
+        if !self.pex.is_enabled() {
+            tracing::debug!(slot = slot.0, "PEX message ignored (private torrent)");
+            return;
+        }
+
+        // Inbound rate limiting: drop messages arriving faster than the
+        // minimum interval from the same peer.
+        let now = tokio::time::Instant::now();
+        if !self.pex.should_accept_from(slot, now) {
+            tracing::debug!(slot = slot.0, "PEX message rate-limited (too frequent)");
+            return;
+        }
+
+        // Peer cap: skip discovery entirely when we're already at capacity.
+        let current_peers = self.peers.len();
+        if current_peers >= self.peer_cap {
+            tracing::debug!(
+                slot = slot.0,
+                current_peers,
+                peer_cap = self.peer_cap,
+                "PEX message ignored (at peer cap)"
+            );
+            return;
+        }
+
+        match magpie_bt_wire::pex::PexMessage::decode(payload) {
+            Ok(msg) => {
+                self.pex.record_received(slot, now);
+                let remaining = self.peer_cap.saturating_sub(current_peers);
+                let addrs: Vec<SocketAddr> = msg
+                    .added
+                    .into_iter()
+                    .map(|p| p.addr)
+                    .take(remaining)
+                    .collect();
+                if !addrs.is_empty() {
+                    tracing::debug!(
+                        slot = slot.0,
+                        count = addrs.len(),
+                        "PEX: discovered peers"
+                    );
+                    self.pex_discovered.extend(addrs);
+                }
+                // Dropped peers are informational — we manage our own
+                // connections independently.
+            }
+            Err(e) => {
+                tracing::debug!(slot = slot.0, error = %e, "PEX: decode failed");
+            }
+        }
+    }
+
+    /// Periodic outbound PEX round: build the diff and send to all peers
+    /// that are due for a PEX message.
+    fn send_pex_round(&mut self) {
+        if !self.pex.is_enabled() {
+            return;
+        }
+        // Collect addresses of connected peers for the diff.
+        let peer_addrs: HashMap<PeerSlot, SocketAddr> = self
+            .peers
+            .iter()
+            .filter_map(|(slot, ps)| ps.addr.map(|a| (*slot, a)))
+            .collect();
+
+        let now = tokio::time::Instant::now();
+        let Some(msg) = self.pex.build_message(&peer_addrs) else {
+            return;
+        };
+        let encoded_payload: Bytes = Bytes::from(msg.encode());
+
+        let slots: Vec<PeerSlot> = self.peers.keys().copied().collect();
+        for slot in slots {
+            if !self.pex.should_send_to(slot, now) {
+                continue;
+            }
+            if let Some(peer) = self.peers.get(&slot) {
+                let _ = peer.tx.send(SessionToPeer::SendExtended {
+                    extension_name: "ut_pex".to_owned(),
+                    payload: encoded_payload.clone(),
+                });
+                self.pex.record_sent(slot, now);
+            }
+        }
     }
 
     /// Send Shutdown to the peer and emit a typed error alert (S4/S5/S6/S7).
@@ -1232,6 +1687,7 @@ mod tests {
             peer_rx,
             disk_tx,
             read_cache,
+            50, // peer_cap
         );
         (session, alerts)
     }

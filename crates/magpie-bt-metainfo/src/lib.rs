@@ -29,6 +29,7 @@
 
 mod error;
 mod info_hash;
+mod magnet;
 mod parse;
 #[cfg(any(feature = "test-support", test))]
 pub mod test_support;
@@ -36,5 +37,6 @@ mod types;
 
 pub use error::{ParseError, ParseErrorKind};
 pub use info_hash::{InfoHash, sha1, sha256};
+pub use magnet::{MagnetError, MagnetLink};
 pub use parse::parse;
 pub use types::{FileListV1, FileTreeNode, FileV1, Info, InfoV1, InfoV2, MetaInfo};
