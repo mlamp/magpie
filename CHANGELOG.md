@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Parity Track A — resume-state persistence, ADR-0022)
+
+- `ResumeSink` trait + `FileResumeSink` default impl under
+  `crates/magpie-bt-core/src/session/resume.rs`. Mirrors the
+  `StatsSink` pattern: `enqueue` is O(1) no-I/O, `flush_graceful` is
+  a bounded-timeout write, sidecars are atomic write-to-tmp + rename.
+  One bencode sidecar per torrent at `<dir>/<hex_info_hash>.resume`.
+- Sidecar schema v1 (7 fields: `bitfield`, `info_hash`, `piece_count`,
+  `piece_length`, `total_length`, `version`). Bitfield packed MSB-first,
+  matching BEP 3 wire format. Forward-compat escape via
+  `UnsupportedVersion` error for readers seeing a higher version.
+- `Engine::torrent_bitfield_snapshot(id)` accessor — consumers poll this
+  (on a timer or after `Alert::PieceCompleted`) to build a
+  `ResumeSnapshot` and feed their `ResumeSink`. Library does not own
+  write cadence, consistent with the stats-sink contract.
+- `Picker::have_snapshot()` public helper — clones the verified-piece
+  bitfield for resume-state persistence.
+- `SessionCommand::BitfieldSnapshot { reply }` variant carrying the
+  oneshot reply channel.
+- 20 unit tests (pack/unpack boundary + short-buffer + trailing-bit
+  tolerance, encode/decode roundtrip, schema rejection for missing
+  fields / wrong version / bad info_hash length, sidecar file
+  roundtrip, deduplication on info_hash, bounded graceful-flush,
+  atomic-write preserves prior on overwrite).
+- Integration test `crates/magpie-bt-core/tests/resume_roundtrip.rs`:
+  seed hosts fixture, first leech downloads-then-pauses with seed
+  up-rate pinned at 16 KiB/s so we actually catch a partial state,
+  persists sidecar, shuts down. Second leech loads sidecar with
+  `initial_have`, completes only the remaining pieces, SHA-256 match.
+  Two silent-failure guards: first leech must be partially complete
+  (not 0, not all); resume leech must emit exactly the remaining-piece
+  count of `PieceCompleted` alerts (if it re-downloads everything,
+  the assertion fails).
+- Re-exports from `magpie-bt`: `FileResumeSink`, `ResumeSink`,
+  `ResumeSinkError`, `ResumeSnapshot`.
+
 ### Added (M2 workstream J — multi-file download)
 
 - `MultiFileStorage` (Unix): a new `Storage` impl backing a torrent onto a directory of files. Sorted entries + binary-search walk over torrent offsets + per-entry `pread`/`pwrite`. Zero-length entries are transparent. Writes that straddle file boundaries split across files atomically at the verified-piece granularity (existing `DiskWriter::VerifyAndWrite` semantics). See ADR-0021.

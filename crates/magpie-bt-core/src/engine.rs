@@ -882,6 +882,39 @@ impl Engine {
         view
     }
 
+    /// Snapshot the torrent's current verified-piece bitfield. Returns
+    /// `None` if `torrent_id` is not registered or the session is gone.
+    ///
+    /// Consumers that persist resume state (ADR-0022) poll this on a
+    /// timer (or after `Alert::PieceCompleted`), feed the result into a
+    /// [`ResumeSnapshot`](crate::session::resume::ResumeSnapshot), and
+    /// hand it to their
+    /// [`ResumeSink`](crate::session::resume::ResumeSink).
+    ///
+    /// The returned `Vec<bool>` is a cloned snapshot: mutations in the
+    /// actor do not affect it, and it does not lock the actor for the
+    /// duration of the caller's work.
+    pub async fn torrent_bitfield_snapshot(
+        &self,
+        torrent_id: TorrentId,
+    ) -> Option<Vec<bool>> {
+        let cmd_tx = {
+            let guard = self.torrents.read().await;
+            let cmd_tx = guard.get(&torrent_id).map(|entry| entry.cmd_tx.clone())?;
+            drop(guard);
+            cmd_tx
+        };
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        if cmd_tx
+            .send(SessionCommand::BitfieldSnapshot { reply: reply_tx })
+            .await
+            .is_err()
+        {
+            return None;
+        }
+        reply_rx.await.ok()
+    }
+
     /// Drain the per-torrent buffer of PEX-discovered peer addresses
     /// (BEP 11). The session accumulates addresses learnt from inbound
     /// `ut_pex` messages; consumers (or the M3 PEX integration test)

@@ -43,6 +43,9 @@ pub use magpie_bt_core::engine::{
 pub use magpie_bt_core::peer_filter::{DefaultPeerFilter, PeerFilter};
 pub use magpie_bt_core::peer_id::PeerIdBuilder;
 pub use magpie_bt_core::picker::Picker;
+pub use magpie_bt_core::session::resume::{
+    FileResumeSink, ResumeSink, ResumeSinkError, ResumeSnapshot,
+};
 pub use magpie_bt_core::session::stats::StatsSnapshot;
 pub use magpie_bt_core::session::stats::sink::{FileStatsSink, StatsSink};
 pub use magpie_bt_core::session::{TorrentParams, TorrentState};

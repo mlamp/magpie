@@ -154,6 +154,15 @@ pub enum SessionCommand {
         /// Reply channel — the actor sends the drained vector and drops.
         reply: oneshot::Sender<Vec<SocketAddr>>,
     },
+    /// Snapshot the torrent's current verified-piece bitfield
+    /// (`Vec<bool>` of length `piece_count`). Used by consumers for
+    /// resume-state persistence (ADR-0022): feed a polled snapshot to
+    /// [`ResumeSink::enqueue`](crate::session::resume::ResumeSink::enqueue)
+    /// on a timer or on `Alert::PieceCompleted`.
+    BitfieldSnapshot {
+        /// Reply channel — the actor sends a cloned `Vec<bool>` and drops.
+        reply: oneshot::Sender<Vec<bool>>,
+    },
 }
 
 /// Messages flowing **from the torrent actor to a peer task**.

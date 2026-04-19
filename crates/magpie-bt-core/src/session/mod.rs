@@ -24,6 +24,7 @@ pub mod peer;
 pub mod peer_upload;
 pub mod pex;
 pub mod read_cache;
+pub mod resume;
 pub mod shaper;
 pub mod stats;
 pub mod torrent;
@@ -34,6 +35,7 @@ pub use disk::{
 };
 pub use messages::{DisconnectReason, PeerSlot, PeerToSession, SessionCommand, SessionToPeer};
 pub use metadata_exchange::{MetadataAssembler, MetadataAssemblyError};
+pub use resume::{FileResumeSink, ResumeSink, ResumeSinkError, ResumeSnapshot, SCHEMA_VERSION};
 pub use peer::{
     DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_PER_PEER_IN_FLIGHT,
     HandshakeError, HandshakeRole, PEER_TO_SESSION_CAPACITY, PeerConfig, PeerConn,

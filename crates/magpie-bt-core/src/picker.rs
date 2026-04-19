@@ -108,6 +108,15 @@ impl Picker {
         self.have[index as usize]
     }
 
+    /// Returns a snapshot of the current have-bitfield — `true` at index `i`
+    /// iff piece `i` is fully downloaded and verified. Used by resume-state
+    /// persistence (ADR-0022). The returned `Vec<bool>` is a clone and does
+    /// not reflect subsequent `mark_have` calls.
+    #[must_use]
+    pub fn have_snapshot(&self) -> Vec<bool> {
+        self.have.clone()
+    }
+
     /// Returns the current availability (peer count) for piece `index`.
     ///
     /// # Panics

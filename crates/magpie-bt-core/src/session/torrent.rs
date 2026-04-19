@@ -501,6 +501,9 @@ impl TorrentSession {
                         let drained = self.drain_pex_discovered();
                         let _ = reply.send(drained);
                     }
+                    Some(SessionCommand::BitfieldSnapshot { reply }) => {
+                        let _ = reply.send(self.picker.have_snapshot());
+                    }
                 },
                 completion = self.completion_rx.recv() => match completion {
                     None => break,
