@@ -31,6 +31,24 @@ pub const DEFAULT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 /// [`ResumeSinkError::UnsupportedVersion`].
 pub const SCHEMA_VERSION: i64 = 1;
 
+/// Hard cap on the size of a single `.resume` sidecar file.
+///
+/// A ~1-million-piece torrent produces a 125 KB bitfield plus a few
+/// hundred bytes of header — ~128 KB worst case. An 8 MiB cap leaves
+/// two orders of magnitude of headroom for future schema additions
+/// while refusing to load multi-GB files crafted by a local attacker
+/// to OOM the process via `fs::read`.
+pub const MAX_SIDECAR_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Hard cap on `piece_count` in a decoded sidecar.
+///
+/// 1 million pieces at the BEP 52 minimum piece length (16 KiB) = 16
+/// GB torrent, which is larger than any practical torrent today. A
+/// sidecar declaring a larger value is either malformed or adversarial
+/// — refuse before allocating a multi-GB `Vec<bool>` in
+/// [`unpack_bitfield`].
+pub const MAX_PIECE_COUNT: u32 = 1_000_000;
+
 /// Snapshot of a torrent's resume state at a point in time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResumeSnapshot {
@@ -181,6 +199,17 @@ impl FileResumeSink {
         info_hash: &[u8; 20],
     ) -> Result<Option<ResumeSnapshot>, ResumeSinkError> {
         let path = self.sidecar_path(info_hash);
+        let metadata = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(ResumeSinkError::Io(e)),
+        };
+        if metadata.len() > MAX_SIDECAR_BYTES {
+            return Err(ResumeSinkError::InvalidSchema(format!(
+                "sidecar {} bytes exceeds MAX_SIDECAR_BYTES {MAX_SIDECAR_BYTES}",
+                metadata.len()
+            )));
+        }
         let bytes = match fs::read(&path) {
             Ok(b) => b,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -333,6 +362,11 @@ fn decode_snapshot(bytes: &[u8]) -> Result<ResumeSnapshot, ResumeSinkError> {
     let piece_count = u32::try_from(piece_count_i).map_err(|_| {
         ResumeSinkError::InvalidSchema(format!("'piece_count' out of u32 range: {piece_count_i}"))
     })?;
+    if piece_count > MAX_PIECE_COUNT {
+        return Err(ResumeSinkError::InvalidSchema(format!(
+            "'piece_count' {piece_count} exceeds MAX_PIECE_COUNT {MAX_PIECE_COUNT}"
+        )));
+    }
     let piece_length_i = dict
         .get(b"piece_length".as_ref())
         .and_then(Value::as_int)
@@ -574,6 +608,57 @@ mod tests {
         // After graceful flush, the sidecar must exist.
         let p = sink.sidecar_path(&sample_snap().info_hash);
         assert!(p.exists());
+    }
+
+    #[test]
+    fn decode_rejects_piece_count_over_max() {
+        use std::borrow::Cow;
+        use std::collections::BTreeMap;
+        let mut dict: BTreeMap<Cow<'_, [u8]>, Value<'_>> = BTreeMap::new();
+        dict.insert(
+            Cow::Borrowed(b"bitfield"),
+            Value::Bytes(Cow::Owned(vec![0u8; 2])),
+        );
+        dict.insert(
+            Cow::Borrowed(b"info_hash"),
+            Value::Bytes(Cow::Owned(vec![0u8; 20])),
+        );
+        // One more than MAX_PIECE_COUNT — must be rejected before
+        // `unpack_bitfield` tries to allocate the resulting vec.
+        let over = i64::from(MAX_PIECE_COUNT + 1);
+        dict.insert(Cow::Borrowed(b"piece_count"), Value::Int(over));
+        dict.insert(Cow::Borrowed(b"piece_length"), Value::Int(16_384));
+        dict.insert(Cow::Borrowed(b"total_length"), Value::Int(163_840));
+        dict.insert(Cow::Borrowed(b"version"), Value::Int(1));
+        let bytes = encode(&Value::Dict(dict));
+        let err = decode_snapshot(&bytes).unwrap_err();
+        let msg = match err {
+            ResumeSinkError::InvalidSchema(m) => m,
+            other => panic!("expected InvalidSchema, got {other:?}"),
+        };
+        assert!(msg.contains("MAX_PIECE_COUNT"), "msg={msg}");
+    }
+
+    #[test]
+    fn load_rejects_oversize_sidecar_file() {
+        let dir = tempdir().unwrap();
+        let sink = FileResumeSink::new(dir.path()).unwrap();
+        let path = sink.sidecar_path(&[0x11u8; 20]);
+        // Write a 10 MiB file — over the 8 MiB cap. Content doesn't
+        // matter: the size check runs first.
+        let mut f = fs::File::create(&path).unwrap();
+        let chunk = vec![0u8; 1024 * 1024];
+        for _ in 0..10 {
+            f.write_all(&chunk).unwrap();
+        }
+        f.sync_all().unwrap();
+        drop(f);
+        let err = sink.load_sidecar(&[0x11u8; 20]).unwrap_err();
+        let msg = match err {
+            ResumeSinkError::InvalidSchema(m) => m,
+            other => panic!("expected InvalidSchema, got {other:?}"),
+        };
+        assert!(msg.contains("MAX_SIDECAR_BYTES"), "msg={msg}");
     }
 
     #[test]

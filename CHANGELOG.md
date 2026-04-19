@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (Track A hardening — resume sidecar DoS caps)
+
+Adversarial review of the resume-state path surfaced two unbounded
+allocations a local-write attacker could weaponise:
+
+- **Sidecar file-size unchecked**: `FileResumeSink::load_sidecar` did
+  `fs::read(path)` unconditionally. A crafted multi-GB `.resume` file
+  would OOM the process before we ever looked at the bencode.
+- **`piece_count` unchecked**: a sidecar declaring
+  `piece_count = u32::MAX` drove `unpack_bitfield` into a
+  `Vec::with_capacity(u32::MAX as usize)` — a ~4.3 GB allocation.
+
+Fixes:
+
+- `MAX_SIDECAR_BYTES = 8 * 1024 * 1024` — checked via
+  `fs::metadata(path).len()` before `fs::read`. A 1M-piece torrent's
+  sidecar is ~128 KB, so 8 MiB is two orders of magnitude of headroom.
+  Oversize files fail with `InvalidSchema`.
+- `MAX_PIECE_COUNT = 1_000_000` — checked at `decode_snapshot` before
+  `unpack_bitfield`. 1M pieces × 16 KiB minimum piece length = 16 GB
+  torrent, larger than any practical real-world torrent.
+
+Both caps are exported as `RESUME_MAX_SIDECAR_BYTES` and
+`RESUME_MAX_PIECE_COUNT` from `magpie_bt_core::session`.
+
+2 new rejection tests: `decode_rejects_piece_count_over_max`,
+`load_rejects_oversize_sidecar_file`.
+
 ### Added (Parity Track D — BEP 15 UDP tracker scrape)
 
 - `encode_scrape` + `decode_scrape` in `tracker/udp.rs`. Enforces the

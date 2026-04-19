@@ -35,7 +35,11 @@ pub use disk::{
 };
 pub use messages::{DisconnectReason, PeerSlot, PeerToSession, SessionCommand, SessionToPeer};
 pub use metadata_exchange::{MetadataAssembler, MetadataAssemblyError};
-pub use resume::{FileResumeSink, ResumeSink, ResumeSinkError, ResumeSnapshot, SCHEMA_VERSION};
+pub use resume::{
+    FileResumeSink, MAX_PIECE_COUNT as RESUME_MAX_PIECE_COUNT,
+    MAX_SIDECAR_BYTES as RESUME_MAX_SIDECAR_BYTES, ResumeSink, ResumeSinkError, ResumeSnapshot,
+    SCHEMA_VERSION as RESUME_SCHEMA_VERSION,
+};
 pub use peer::{
     DEFAULT_EXTENSION_HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_PER_PEER_IN_FLIGHT,
     HandshakeError, HandshakeRole, PEER_TO_SESSION_CAPACITY, PeerConfig, PeerConn,
