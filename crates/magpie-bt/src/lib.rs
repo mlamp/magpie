@@ -52,5 +52,7 @@ pub use magpie_bt_core::session::{TorrentParams, TorrentState};
 #[cfg(unix)]
 pub use magpie_bt_core::storage::{FdPool, FileSpec, FileStorage, MultiFileStorage};
 pub use magpie_bt_core::storage::{MemoryStorage, Storage, StorageError};
-pub use magpie_bt_core::tracker::{HttpTracker, Tracker, UdpTracker};
+pub use magpie_bt_core::tracker::{
+    HttpTracker, ScrapeFile, ScrapeResponse, Tracker, TrackerScrape, UdpTracker,
+};
 pub use magpie_bt_metainfo::{InfoHash, MetaInfo, ParseError, parse};

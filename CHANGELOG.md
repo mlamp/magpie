@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Parity Track D — BEP 48 HTTP tracker scrape)
+
+- `TrackerScrape` companion trait in `tracker/mod.rs` — kept separate
+  from `Tracker` so a minimal impl (e.g. a future DHT "tracker")
+  doesn't need to reason about scrape support. Returns a new
+  `ScrapeResponse { files: HashMap<[u8; 20], ScrapeFile>, failure_reason }`.
+- `ScrapeFile` with `complete`, `incomplete`, `downloaded`, optional `name`.
+- `HttpTracker` implements `TrackerScrape`: rewrites the last
+  `announce` segment of the announce URL to `scrape`, percent-encodes
+  each `info_hash` as a query parameter, preserves any pre-existing
+  query string (tracker passkeys etc), and parses the bencode response
+  with full field validation.
+- `build_scrape_url` + `parse_scrape_response` public helpers for
+  consumers driving a custom HTTP transport (mirrors the existing
+  `build_announce_url` + `parse_response` pair).
+- 11 new tests: URL rewriting (basic, query preservation, missing-
+  `announce` segment rejection, multiple hashes, empty-base rejection),
+  response parsing (basic, with `name`, failure-reason surfaces,
+  missing `files` dict, bad info_hash key length, missing counter
+  fields).
+- Re-exports from `magpie-bt`: `ScrapeFile`, `ScrapeResponse`,
+  `TrackerScrape`.
+- UDP-side scrape (BEP 15 action=2) is a separate follow-up; not in
+  this commit. Consumers that want scrape on UDP trackers will need to
+  wait for that or roll their own via the codec.
+
 ### Added (Parity Track D — BEP 27 private-flag audit)
 
 - Defense-in-depth gate on `TorrentSession::drain_pex_discovered`: even

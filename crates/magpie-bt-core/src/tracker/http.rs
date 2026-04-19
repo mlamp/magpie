@@ -16,7 +16,10 @@ use reqwest::redirect::Policy;
 
 use crate::tracker::compact;
 use crate::tracker::error::TrackerError;
-use crate::tracker::{AnnounceFuture, AnnounceRequest, AnnounceResponse, Tracker};
+use crate::tracker::{
+    AnnounceFuture, AnnounceRequest, AnnounceResponse, ScrapeFile, ScrapeFuture, ScrapeResponse,
+    Tracker, TrackerScrape,
+};
 
 /// Overall request budget (DNS + TLS + headers + body).
 pub(super) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -102,6 +105,24 @@ impl Tracker for HttpTracker {
                 .map_err(TrackerError::Transport)?;
             let bytes = read_bounded_body(response, MAX_RESPONSE_BYTES).await?;
             parse_announce_response(&bytes)
+        })
+    }
+}
+
+impl TrackerScrape for HttpTracker {
+    fn scrape<'a>(&'a self, info_hashes: &'a [[u8; 20]]) -> ScrapeFuture<'a> {
+        Box::pin(async move {
+            let url = build_scrape_url(&self.base_url, info_hashes)?;
+            let response = self
+                .client
+                .get(&url)
+                .send()
+                .await
+                .map_err(TrackerError::Transport)?
+                .error_for_status()
+                .map_err(TrackerError::Transport)?;
+            let bytes = read_bounded_body(response, MAX_RESPONSE_BYTES).await?;
+            parse_scrape_response(&bytes)
         })
     }
 }
@@ -199,6 +220,145 @@ const fn hex_nibble(n: u8) -> char {
 /// [`TrackerError::CompactPeersTruncated`] for malformed peer lists.
 pub fn parse_response(bytes: &[u8]) -> Result<AnnounceResponse, TrackerError> {
     parse_announce_response(bytes)
+}
+
+/// Compose a BEP 48 scrape URL from an announce URL by rewriting the
+/// last path segment `announce` → `scrape`, then appending
+/// `info_hash=<binary>` query parameters (percent-encoded).
+///
+/// # Errors
+///
+/// [`TrackerError::InvalidUrl`] if `base_url` is empty, has no
+/// `announce` path segment (tracker doesn't advertise scrape per BEP
+/// 48 §Spec), or is otherwise malformed.
+pub fn build_scrape_url(
+    base_url: &str,
+    info_hashes: &[[u8; 20]],
+) -> Result<String, TrackerError> {
+    if base_url.is_empty() {
+        return Err(TrackerError::InvalidUrl("empty tracker URL".into()));
+    }
+    // Split off the query string if present, rewrite the path
+    // component, then reattach.
+    let (path_url, query) = base_url.find('?').map_or((base_url, None), |i| {
+        (&base_url[..i], Some(&base_url[i + 1..]))
+    });
+    // The rewrite targets the last path segment. Accept common
+    // endings: `/announce`, `/announce.php`, etc. — per BEP 48 the
+    // scrape URL is formed "by replacing the last occurrence of
+    // 'announce' with 'scrape'".
+    let scrape_path = match path_url.rfind("announce") {
+        Some(pos) => {
+            let mut s = String::with_capacity(path_url.len() + 1);
+            s.push_str(&path_url[..pos]);
+            s.push_str("scrape");
+            s.push_str(&path_url[pos + "announce".len()..]);
+            s
+        }
+        None => {
+            return Err(TrackerError::InvalidUrl(
+                "announce URL has no 'announce' segment — tracker does not support BEP 48 scrape"
+                    .into(),
+            ));
+        }
+    };
+
+    let mut url = scrape_path;
+    // Preserve any pre-existing query (tracker-specific keys).
+    if let Some(q) = query {
+        url.push('?');
+        url.push_str(q);
+    }
+    let mut first = query.is_none();
+    for hash in info_hashes {
+        url.push(if first { '?' } else { '&' });
+        first = false;
+        url.push_str("info_hash=");
+        encode_binary(&mut url, hash);
+    }
+    Ok(url)
+}
+
+/// Parse a BEP 48 scrape response body.
+///
+/// # Errors
+///
+/// [`TrackerError::MalformedResponse`] on structural failure or
+/// missing required fields. [`TrackerError::Failure`] when the
+/// tracker returned a `failure reason` field.
+pub fn parse_scrape_response(bytes: &[u8]) -> Result<ScrapeResponse, TrackerError> {
+    let value = decode(bytes).map_err(|e| TrackerError::MalformedResponse(e.to_string()))?;
+    let dict = value
+        .as_dict()
+        .ok_or_else(|| TrackerError::MalformedResponse("response is not a dict".into()))?;
+
+    if let Some(reason) = dict.get(&b"failure reason"[..]).and_then(Value::as_bytes) {
+        return Err(TrackerError::Failure(
+            String::from_utf8_lossy(reason).into_owned(),
+        ));
+    }
+
+    let files_val = dict.get(&b"files"[..]).ok_or_else(|| {
+        TrackerError::MalformedResponse("scrape response missing 'files'".into())
+    })?;
+    let files_dict = files_val
+        .as_dict()
+        .ok_or_else(|| TrackerError::MalformedResponse("'files' is not a dict".into()))?;
+
+    let mut files: std::collections::HashMap<[u8; 20], ScrapeFile> =
+        std::collections::HashMap::with_capacity(files_dict.len());
+    for (key, entry) in files_dict {
+        if key.len() != 20 {
+            return Err(TrackerError::MalformedResponse(format!(
+                "scrape 'files' key has len {} (want 20)",
+                key.len()
+            )));
+        }
+        let entry_dict = entry
+            .as_dict()
+            .ok_or_else(|| TrackerError::MalformedResponse("'files' value is not a dict".into()))?;
+        let complete = entry_dict
+            .get(&b"complete"[..])
+            .and_then(Value::as_int)
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or_else(|| {
+                TrackerError::MalformedResponse("scrape file missing 'complete'".into())
+            })?;
+        let incomplete = entry_dict
+            .get(&b"incomplete"[..])
+            .and_then(Value::as_int)
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or_else(|| {
+                TrackerError::MalformedResponse("scrape file missing 'incomplete'".into())
+            })?;
+        let downloaded = entry_dict
+            .get(&b"downloaded"[..])
+            .and_then(Value::as_int)
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or_else(|| {
+                TrackerError::MalformedResponse("scrape file missing 'downloaded'".into())
+            })?;
+        let name = entry_dict
+            .get(&b"name"[..])
+            .and_then(Value::as_bytes)
+            .map(|b| String::from_utf8_lossy(b).into_owned());
+        let mut info_hash = [0u8; 20];
+        info_hash.copy_from_slice(key);
+        files.insert(
+            info_hash,
+            ScrapeFile {
+                complete,
+                incomplete,
+                downloaded,
+                name,
+            },
+        );
+    }
+
+    Ok(ScrapeResponse {
+        files,
+        failure_reason: None,
+    })
 }
 
 fn parse_announce_response(bytes: &[u8]) -> Result<AnnounceResponse, TrackerError> {
@@ -405,5 +565,113 @@ mod tests {
         let resp = parse_for_test(payload).unwrap();
         assert_eq!(resp.peers.len(), 1);
         assert_eq!(resp.peers[0].to_string(), "127.0.0.1:6881");
+    }
+
+    // ----- BEP 48 scrape -----
+
+    #[test]
+    fn build_scrape_url_rewrites_announce_segment() {
+        let url = build_scrape_url("http://tr.example/announce", &[[0xAA; 20]]).unwrap();
+        assert!(url.starts_with("http://tr.example/scrape?info_hash="));
+    }
+
+    #[test]
+    fn build_scrape_url_preserves_query_string() {
+        let url = build_scrape_url(
+            "http://tr.example/announce?passkey=secret",
+            &[[0xAA; 20]],
+        )
+        .unwrap();
+        assert!(
+            url.starts_with("http://tr.example/scrape?passkey=secret&info_hash="),
+            "url = {url}"
+        );
+    }
+
+    #[test]
+    fn build_scrape_url_rejects_url_without_announce_segment() {
+        let err = build_scrape_url("http://tr.example/custompath", &[[0xAA; 20]]).unwrap_err();
+        assert!(matches!(err, TrackerError::InvalidUrl(_)));
+    }
+
+    #[test]
+    fn build_scrape_url_encodes_multiple_hashes() {
+        let hashes = &[[0xAA; 20], [0xBB; 20], [0xCC; 20]];
+        let url = build_scrape_url("http://tr.example/announce", hashes).unwrap();
+        // Three info_hash params: first after `?`, other two after `&`.
+        assert_eq!(url.matches("info_hash=").count(), 3);
+    }
+
+    #[test]
+    fn build_scrape_url_rejects_empty_base() {
+        let err = build_scrape_url("", &[[0xAA; 20]]).unwrap_err();
+        assert!(matches!(err, TrackerError::InvalidUrl(_)));
+    }
+
+    #[test]
+    fn parse_scrape_response_basic() {
+        // d5:filesd20:<hash>d8:completei10e10:downloadedi50e10:incompletei5eeee
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"d5:filesd20:");
+        payload.extend_from_slice(&[0xAAu8; 20]);
+        payload.extend_from_slice(b"d8:completei10e10:downloadedi50e10:incompletei5eeee");
+        let resp = parse_scrape_response(&payload).unwrap();
+        assert_eq!(resp.files.len(), 1);
+        let entry = &resp.files[&[0xAA; 20]];
+        assert_eq!(entry.complete, 10);
+        assert_eq!(entry.incomplete, 5);
+        assert_eq!(entry.downloaded, 50);
+        assert!(entry.name.is_none());
+    }
+
+    #[test]
+    fn parse_scrape_response_with_name() {
+        // d5:files d 20:<hash> d 8:completei1e 10:downloadedi2e 10:incompletei3e 4:name6:ubuntu e e e
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"d5:filesd20:");
+        payload.extend_from_slice(&[0xABu8; 20]);
+        payload.extend_from_slice(
+            b"d8:completei1e10:downloadedi2e10:incompletei3e4:name6:ubuntuee",
+        );
+        payload.extend_from_slice(b"e"); // close outer response dict
+        let resp = parse_scrape_response(&payload).unwrap();
+        let entry = &resp.files[&[0xAB; 20]];
+        assert_eq!(entry.name.as_deref(), Some("ubuntu"));
+    }
+
+    #[test]
+    fn parse_scrape_response_surfaces_failure() {
+        let payload = b"d14:failure reason17:torrent not founde";
+        let err = parse_scrape_response(payload).unwrap_err();
+        assert!(matches!(err, TrackerError::Failure(ref s) if s == "torrent not found"));
+    }
+
+    #[test]
+    fn parse_scrape_response_rejects_missing_files() {
+        let payload = b"de"; // empty dict
+        let err = parse_scrape_response(payload).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn parse_scrape_response_rejects_bad_key_length() {
+        // files key is 19 bytes, not 20
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"d5:filesd19:");
+        payload.extend_from_slice(&[0xAAu8; 19]);
+        payload.extend_from_slice(b"d8:completei0e10:downloadedi0e10:incompletei0eeeee");
+        let err = parse_scrape_response(&payload).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn parse_scrape_response_rejects_missing_counter_fields() {
+        // Missing `incomplete`
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"d5:filesd20:");
+        payload.extend_from_slice(&[0xAAu8; 20]);
+        payload.extend_from_slice(b"d8:completei1e10:downloadedi2eeee");
+        let err = parse_scrape_response(&payload).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
     }
 }

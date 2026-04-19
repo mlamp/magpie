@@ -24,7 +24,9 @@ pub mod tiered;
 pub mod udp;
 
 pub use error::TrackerError;
-pub use http::{HttpTracker, build_announce_url, parse_response};
+pub use http::{
+    HttpTracker, build_announce_url, build_scrape_url, parse_response, parse_scrape_response,
+};
 pub use tiered::TieredTracker;
 pub use udp::{MAX_ATTEMPTS as UDP_TRACKER_MAX_ATTEMPTS, UdpTracker};
 
@@ -125,4 +127,48 @@ pub type AnnounceFuture<'a> =
 pub trait Tracker: Send + Sync {
     /// Announce to the tracker.
     fn announce<'a>(&'a self, req: AnnounceRequest<'a>) -> AnnounceFuture<'a>;
+}
+
+// ---------------------------------------------------------------------------
+// BEP 48 scrape
+// ---------------------------------------------------------------------------
+
+/// Per-torrent counters returned by a BEP 48 scrape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScrapeFile {
+    /// Number of seeders currently in the swarm.
+    pub complete: u64,
+    /// Number of leechers currently in the swarm.
+    pub incomplete: u64,
+    /// Cumulative completion count since tracker start.
+    pub downloaded: u64,
+    /// Optional internal name returned by some trackers.
+    pub name: Option<String>,
+}
+
+/// Decoded scrape response: per-`info_hash` counters, plus an optional
+/// `failure reason` BEP 48 trackers can return in lieu of `files`.
+#[derive(Debug, Clone, Default)]
+pub struct ScrapeResponse {
+    /// Per-`info_hash` counters.
+    pub files: std::collections::HashMap<[u8; 20], ScrapeFile>,
+    /// Human-readable `failure reason` field.
+    pub failure_reason: Option<String>,
+}
+
+/// Boxed future returned by [`TrackerScrape::scrape`]. See also
+/// [`AnnounceFuture`].
+pub type ScrapeFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<ScrapeResponse, TrackerError>> + Send + 'a>>;
+
+/// Optional companion trait for trackers that expose BEP 48 scrape.
+///
+/// Split from [`Tracker`] so a minimal tracker impl doesn't have to
+/// reason about scrape support — e.g. DHT "trackers" (BEP 5) don't have
+/// a scrape concept.
+pub trait TrackerScrape: Send + Sync {
+    /// Scrape counters for one or more `info_hash`es. Trackers commonly
+    /// cap the number of hashes per request (typical: ~64); callers
+    /// passing very long lists should batch externally.
+    fn scrape<'a>(&'a self, info_hashes: &'a [[u8; 20]]) -> ScrapeFuture<'a>;
 }
