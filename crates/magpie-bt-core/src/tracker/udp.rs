@@ -28,9 +28,14 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use super::{AnnounceEvent, AnnounceRequest, AnnounceResponse, TrackerError};
+use super::{
+    AnnounceEvent, AnnounceFuture, AnnounceRequest, AnnounceResponse, ScrapeFile, ScrapeFuture,
+    ScrapeResponse, Tracker, TrackerError, TrackerScrape,
+};
+use crate::session::udp::demux::UdpDemux;
 
 /// BEP 15 magic constant. First 8 bytes of any `CONNECT` request.
 pub const PROTOCOL_ID: u64 = 0x0000_0417_2710_1980;
@@ -185,6 +190,120 @@ pub fn decode_announce(bytes: &[u8], expected_txid: u32) -> Result<AnnounceRespo
     })
 }
 
+/// BEP 15 scrape request/response size limit: up to 74 info-hashes per packet.
+///
+/// Keeps the request in one safe UDP datagram (74 · 20 + 16-byte header =
+/// 1496 bytes, below the typical 1500 MTU). Callers scraping more hashes
+/// must batch externally.
+pub const MAX_SCRAPE_HASHES: usize = 74;
+
+/// Encode a SCRAPE request. `info_hashes.len()` must be in the range
+/// `[1, MAX_SCRAPE_HASHES]` — the caller is responsible for batching
+/// (see [`MAX_SCRAPE_HASHES`]).
+///
+/// Layout: `connection_id u64 | action=2 u32 | transaction_id u32 |
+/// info_hash[0..20] | info_hash[0..20] | ...`.
+///
+/// # Errors
+///
+/// Returns [`TrackerError::MalformedResponse`] if `info_hashes` is
+/// empty or larger than [`MAX_SCRAPE_HASHES`]. (Reusing this variant
+/// keeps the callers' error handling uniform — a caller passing an
+/// out-of-range batch is structurally malformed at the call site.)
+pub fn encode_scrape(
+    connection_id: u64,
+    transaction_id: u32,
+    info_hashes: &[[u8; 20]],
+) -> Result<Vec<u8>, TrackerError> {
+    if info_hashes.is_empty() {
+        return Err(TrackerError::MalformedResponse(
+            "scrape request has zero info_hashes".into(),
+        ));
+    }
+    if info_hashes.len() > MAX_SCRAPE_HASHES {
+        return Err(TrackerError::MalformedResponse(format!(
+            "scrape request has {} info_hashes (max {MAX_SCRAPE_HASHES})",
+            info_hashes.len()
+        )));
+    }
+    let mut buf = Vec::with_capacity(16 + info_hashes.len() * 20);
+    buf.extend_from_slice(&connection_id.to_be_bytes());
+    buf.extend_from_slice(&ACTION_SCRAPE.to_be_bytes());
+    buf.extend_from_slice(&transaction_id.to_be_bytes());
+    for h in info_hashes {
+        buf.extend_from_slice(h);
+    }
+    Ok(buf)
+}
+
+/// Decode a SCRAPE response. The wire format is positional
+/// (`seeders`/`completed`/`leechers` per info-hash in request order);
+/// we zip with the original hash list to build the keyed response.
+///
+/// # Errors
+///
+/// [`TrackerError::MalformedResponse`] on length/txid mismatch or
+/// wrong response size (one 12-byte file record per hash requested).
+/// [`TrackerError::Failure`] if the tracker replied with `action=3`.
+pub fn decode_scrape(
+    bytes: &[u8],
+    expected_txid: u32,
+    info_hashes: &[[u8; 20]],
+) -> Result<ScrapeResponse, TrackerError> {
+    if bytes.len() < 8 {
+        return Err(TrackerError::MalformedResponse(
+            "scrape response < 8 bytes".into(),
+        ));
+    }
+    let action = u32::from_be_bytes(bytes[0..4].try_into().unwrap_or([0; 4]));
+    let txid = u32::from_be_bytes(bytes[4..8].try_into().unwrap_or([0; 4]));
+    if txid != expected_txid {
+        return Err(TrackerError::MalformedResponse(
+            "transaction_id mismatch".into(),
+        ));
+    }
+    if action == ACTION_ERROR {
+        let msg = String::from_utf8_lossy(&bytes[8..]).into_owned();
+        return Err(TrackerError::Failure(msg));
+    }
+    if action != ACTION_SCRAPE {
+        return Err(TrackerError::MalformedResponse(format!(
+            "unexpected action {action}"
+        )));
+    }
+    let expected_body = info_hashes.len() * 12;
+    if bytes.len() - 8 != expected_body {
+        return Err(TrackerError::MalformedResponse(format!(
+            "scrape body has {} bytes, expected {expected_body} ({} hashes × 12)",
+            bytes.len() - 8,
+            info_hashes.len()
+        )));
+    }
+    let mut files: std::collections::HashMap<[u8; 20], ScrapeFile> =
+        std::collections::HashMap::with_capacity(info_hashes.len());
+    for (i, hash) in info_hashes.iter().enumerate() {
+        let off = 8 + i * 12;
+        let seeders = u32::from_be_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
+        let completed =
+            u32::from_be_bytes(bytes[off + 4..off + 8].try_into().unwrap_or([0; 4]));
+        let leechers =
+            u32::from_be_bytes(bytes[off + 8..off + 12].try_into().unwrap_or([0; 4]));
+        files.insert(
+            *hash,
+            ScrapeFile {
+                complete: u64::from(seeders),
+                incomplete: u64::from(leechers),
+                downloaded: u64::from(completed),
+                name: None,
+            },
+        );
+    }
+    Ok(ScrapeResponse {
+        files,
+        failure_reason: None,
+    })
+}
+
 /// BEP 15 retry timing (spec §5): request timeout is `15 * 2^n` seconds,
 /// n starting at 0, capped at 3840 s.
 #[must_use]
@@ -198,13 +317,6 @@ pub const fn retry_timeout(attempt: u32) -> Duration {
 // ---------------------------------------------------------------------------
 // UdpTracker client
 // ---------------------------------------------------------------------------
-
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::Instant;
-
-use super::{AnnounceFuture, Tracker};
-use crate::session::udp::demux::UdpDemux;
 
 /// Cap on attempts for a single CONNECT→ANNOUNCE cycle.
 ///
@@ -349,21 +461,70 @@ impl UdpTracker {
                 // Tracker rejected — possibly stale connection id.
                 // Invalidate cache and retry exactly once with a fresh
                 // CONNECT.
-                {
-                    let mut guard = self.cached_conn.lock().expect("cached_conn poisoned");
-                    *guard = None;
-                }
+                self.invalidate_cached_conn();
                 let fresh = self.ensure_connection_id().await?;
                 self.run_announce(fresh, req).await
             }
             Err(e) => Err(e),
         }
     }
+
+    async fn run_scrape(
+        &self,
+        conn_id: u64,
+        info_hashes: &[[u8; 20]],
+    ) -> Result<ScrapeResponse, TrackerError> {
+        for attempt in 0..self.max_attempts {
+            let txid = random_txid();
+            let rx = self
+                .demux
+                .register_tracker_response(txid, retry_timeout(attempt))
+                .map_err(|e| TrackerError::Udp(format!("register SCRAPE txid: {e}")))?;
+            let packet = encode_scrape(conn_id, txid, info_hashes)?;
+            self.demux
+                .send_to(&packet, self.target)
+                .await
+                .map_err(|e| TrackerError::Udp(format!("send SCRAPE: {e}")))?;
+            if let Ok(Ok(resp)) =
+                tokio::time::timeout(retry_timeout(attempt), rx).await
+            {
+                return decode_scrape(&resp.data, txid, info_hashes);
+            }
+        }
+        Err(TrackerError::Timeout(self.max_attempts))
+    }
+
+    async fn do_scrape(
+        &self,
+        info_hashes: &[[u8; 20]],
+    ) -> Result<ScrapeResponse, TrackerError> {
+        let conn_id = self.ensure_connection_id().await?;
+        match self.run_scrape(conn_id, info_hashes).await {
+            Ok(r) => Ok(r),
+            Err(TrackerError::Failure(_)) => {
+                self.invalidate_cached_conn();
+                let fresh = self.ensure_connection_id().await?;
+                self.run_scrape(fresh, info_hashes).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn invalidate_cached_conn(&self) {
+        let mut guard = self.cached_conn.lock().expect("cached_conn poisoned");
+        *guard = None;
+    }
 }
 
 impl Tracker for UdpTracker {
     fn announce<'a>(&'a self, req: AnnounceRequest<'a>) -> AnnounceFuture<'a> {
         Box::pin(async move { self.do_announce(&req).await })
+    }
+}
+
+impl TrackerScrape for UdpTracker {
+    fn scrape<'a>(&'a self, info_hashes: &'a [[u8; 20]]) -> ScrapeFuture<'a> {
+        Box::pin(async move { self.do_scrape(info_hashes).await })
     }
 }
 
@@ -623,6 +784,147 @@ mod tests {
             TrackerError::Failure(msg) => assert!(msg.contains("overloaded")),
             other => panic!("expected Failure, got {other:?}"),
         }
+        task.abort();
+    }
+
+    // ---- SCRAPE codec --------------------------------------------
+
+    #[test]
+    fn encode_scrape_rejects_empty_input() {
+        let err = encode_scrape(0, 0, &[]).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn encode_scrape_rejects_too_many_hashes() {
+        let hashes = vec![[0xAAu8; 20]; MAX_SCRAPE_HASHES + 1];
+        let err = encode_scrape(0, 0, &hashes).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn encode_scrape_lays_out_header_and_hashes() {
+        let buf = encode_scrape(0x1122_3344_5566_7788, 0xAABB_CCDD, &[[0xAA; 20], [0xBB; 20]])
+            .unwrap();
+        assert_eq!(buf.len(), 16 + 40);
+        assert_eq!(&buf[0..8], &0x1122_3344_5566_7788u64.to_be_bytes());
+        assert_eq!(&buf[8..12], &ACTION_SCRAPE.to_be_bytes());
+        assert_eq!(&buf[12..16], &0xAABB_CCDDu32.to_be_bytes());
+        assert_eq!(&buf[16..36], &[0xAAu8; 20]);
+        assert_eq!(&buf[36..56], &[0xBBu8; 20]);
+    }
+
+    #[test]
+    fn decode_scrape_roundtrips_two_hashes() {
+        // Build a response: action=2, txid, (seeders, completed, leechers) × 2.
+        let mut resp = Vec::new();
+        resp.extend_from_slice(&ACTION_SCRAPE.to_be_bytes());
+        resp.extend_from_slice(&0xAABB_CCDDu32.to_be_bytes());
+        resp.extend_from_slice(&10u32.to_be_bytes()); // seeders[0]
+        resp.extend_from_slice(&100u32.to_be_bytes()); // completed[0]
+        resp.extend_from_slice(&20u32.to_be_bytes()); // leechers[0]
+        resp.extend_from_slice(&5u32.to_be_bytes()); // seeders[1]
+        resp.extend_from_slice(&50u32.to_be_bytes()); // completed[1]
+        resp.extend_from_slice(&15u32.to_be_bytes()); // leechers[1]
+        let hashes = [[0xAAu8; 20], [0xBBu8; 20]];
+        let out = decode_scrape(&resp, 0xAABB_CCDD, &hashes).unwrap();
+        assert_eq!(out.files.len(), 2);
+        let a = &out.files[&[0xAA; 20]];
+        assert_eq!(a.complete, 10);
+        assert_eq!(a.downloaded, 100);
+        assert_eq!(a.incomplete, 20);
+        let b = &out.files[&[0xBB; 20]];
+        assert_eq!(b.complete, 5);
+        assert_eq!(b.downloaded, 50);
+        assert_eq!(b.incomplete, 15);
+    }
+
+    #[test]
+    fn decode_scrape_rejects_wrong_size() {
+        let mut resp = Vec::new();
+        resp.extend_from_slice(&ACTION_SCRAPE.to_be_bytes());
+        resp.extend_from_slice(&1u32.to_be_bytes());
+        // Claim 2 hashes but only supply 12 bytes (= 1 file record).
+        resp.extend_from_slice(&[0u8; 12]);
+        let err = decode_scrape(&resp, 1, &[[0xAAu8; 20], [0xBBu8; 20]]).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[test]
+    fn decode_scrape_propagates_tracker_error() {
+        let mut resp = Vec::new();
+        resp.extend_from_slice(&ACTION_ERROR.to_be_bytes());
+        resp.extend_from_slice(&42u32.to_be_bytes());
+        resp.extend_from_slice(b"not permitted");
+        let err = decode_scrape(&resp, 42, &[[0xAA; 20]]).unwrap_err();
+        match err {
+            TrackerError::Failure(msg) => assert_eq!(msg, "not permitted"),
+            other => panic!("expected Failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decode_scrape_rejects_wrong_txid() {
+        let mut resp = Vec::new();
+        resp.extend_from_slice(&ACTION_SCRAPE.to_be_bytes());
+        resp.extend_from_slice(&999u32.to_be_bytes());
+        resp.extend_from_slice(&[0u8; 12]);
+        let err = decode_scrape(&resp, 1, &[[0xAAu8; 20]]).unwrap_err();
+        assert!(matches!(err, TrackerError::MalformedResponse(_)));
+    }
+
+    #[tokio::test]
+    async fn udp_tracker_scrape_end_to_end() {
+        // Mock tracker: respond to CONNECT, then to SCRAPE with a
+        // canned 2-file response.
+        let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let mut buf = vec![0u8; 2048];
+            loop {
+                let Ok((n, from)) = sock.recv_from(&mut buf).await else {
+                    return;
+                };
+                if n < 16 {
+                    continue;
+                }
+                let action = u32::from_be_bytes(buf[8..12].try_into().unwrap());
+                let txid = u32::from_be_bytes(buf[12..16].try_into().unwrap());
+                if action == ACTION_CONNECT {
+                    let mut resp = [0u8; 16];
+                    resp[0..4].copy_from_slice(&ACTION_CONNECT.to_be_bytes());
+                    resp[4..8].copy_from_slice(&txid.to_be_bytes());
+                    resp[8..16].copy_from_slice(&0xCAFE_BABEu64.to_be_bytes());
+                    let _ = sock.send_to(&resp, from).await;
+                } else if action == ACTION_SCRAPE {
+                    // Two info_hashes sent → respond with 2 file records.
+                    let mut resp = Vec::new();
+                    resp.extend_from_slice(&ACTION_SCRAPE.to_be_bytes());
+                    resp.extend_from_slice(&txid.to_be_bytes());
+                    // Record 0: seeders=7 completed=70 leechers=3
+                    resp.extend_from_slice(&7u32.to_be_bytes());
+                    resp.extend_from_slice(&70u32.to_be_bytes());
+                    resp.extend_from_slice(&3u32.to_be_bytes());
+                    // Record 1: seeders=0 completed=0 leechers=0
+                    resp.extend_from_slice(&0u32.to_be_bytes());
+                    resp.extend_from_slice(&0u32.to_be_bytes());
+                    resp.extend_from_slice(&0u32.to_be_bytes());
+                    let _ = sock.send_to(&resp, from).await;
+                }
+            }
+        });
+
+        let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let client = UdpTracker::new(Arc::clone(&demux), addr);
+        let hashes = [[0x11u8; 20], [0x22u8; 20]];
+        let resp = client.do_scrape(&hashes).await.unwrap();
+        assert_eq!(resp.files.len(), 2);
+        assert_eq!(resp.files[&[0x11; 20]].complete, 7);
+        assert_eq!(resp.files[&[0x11; 20]].downloaded, 70);
+        assert_eq!(resp.files[&[0x11; 20]].incomplete, 3);
+        assert_eq!(resp.files[&[0x22; 20]].complete, 0);
         task.abort();
     }
 

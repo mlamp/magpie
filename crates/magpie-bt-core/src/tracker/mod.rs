@@ -28,7 +28,10 @@ pub use http::{
     HttpTracker, build_announce_url, build_scrape_url, parse_response, parse_scrape_response,
 };
 pub use tiered::TieredTracker;
-pub use udp::{MAX_ATTEMPTS as UDP_TRACKER_MAX_ATTEMPTS, UdpTracker};
+pub use udp::{
+    MAX_ATTEMPTS as UDP_TRACKER_MAX_ATTEMPTS, MAX_SCRAPE_HASHES as UDP_MAX_SCRAPE_HASHES,
+    UdpTracker,
+};
 
 // Re-export for documentation references.
 pub use AnnounceFuture as _AnnounceFutureMarker;

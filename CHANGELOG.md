@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Parity Track D — BEP 15 UDP tracker scrape)
+
+- `encode_scrape` + `decode_scrape` in `tracker/udp.rs`. Enforces the
+  BEP 15 batch cap `MAX_SCRAPE_HASHES = 74` at encode time (74·20 + 16 =
+  1496 bytes stays under typical MTU). Response is positional; decoder
+  zips the 12-byte records (seeders/completed/leechers each `u32`) with
+  the caller-supplied hash list to build a `ScrapeResponse` keyed on
+  info_hash.
+- `UdpTracker` implements `TrackerScrape` — same retry curve, same
+  stale-connection-id recovery (`invalidate_cached_conn` → refresh
+  CONNECT → retry once) as the announce path.
+- Re-exports: `UDP_MAX_SCRAPE_HASHES` via
+  `magpie_bt_core::tracker` (aliasing the module-level `MAX_SCRAPE_HASHES`
+  to stay distinct from the announce-attempt cap).
+- 8 new tests: empty-input rejection, over-cap rejection, request
+  layout verification, two-hash response roundtrip, wrong-size response
+  rejection, txid-mismatch rejection, tracker-error propagation, and a
+  full mock-tracker end-to-end `UdpTracker::scrape` test (CONNECT →
+  SCRAPE → keyed response, two files).
+
 ### Added (Parity Track D — BEP 48 HTTP tracker scrape)
 
 - `TrackerScrape` companion trait in `tracker/mod.rs` — kept separate
