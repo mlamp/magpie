@@ -68,3 +68,4 @@ Short notes on options we did not pick, and why.
 | [0019](0019-completion-transition.md) | Leech→seed completion transition: five-step forward-only sequence | accepted |
 | [0021](0021-multi-file-storage.md) | Multi-file storage: `MultiFileStorage` impl of the existing `Storage` trait, sorted entries + bounded LRU fd pool | proposed |
 | [0022](0022-resume-state.md) | Resume-state persistence: `ResumeSink` + `FileResumeSink` bencode sidecar | proposed |
+| [0023](0023-super-seeding.md) | Super-seeding (BEP 16): `SuperSeedChoker` + per-peer `RevealState` | proposed (design only) |

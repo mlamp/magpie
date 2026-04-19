@@ -238,6 +238,11 @@ pub fn build_scrape_url(
     if base_url.is_empty() {
         return Err(TrackerError::InvalidUrl("empty tracker URL".into()));
     }
+    if info_hashes.is_empty() {
+        return Err(TrackerError::InvalidUrl(
+            "scrape request has zero info_hashes".into(),
+        ));
+    }
     // Split off the query string if present, rewrite the path
     // component, then reattach.
     let (path_url, query) = base_url.find('?').map_or((base_url, None), |i| {
@@ -605,6 +610,12 @@ mod tests {
     #[test]
     fn build_scrape_url_rejects_empty_base() {
         let err = build_scrape_url("", &[[0xAA; 20]]).unwrap_err();
+        assert!(matches!(err, TrackerError::InvalidUrl(_)));
+    }
+
+    #[test]
+    fn build_scrape_url_rejects_empty_hashes() {
+        let err = build_scrape_url("http://tr.example/announce", &[]).unwrap_err();
         assert!(matches!(err, TrackerError::InvalidUrl(_)));
     }
 
