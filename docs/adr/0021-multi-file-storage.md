@@ -56,6 +56,21 @@ impl MultiFileStorage {
 3. **All `Storage` trait methods remain `&self`** (ADR-0004 invariant #1). `fd_pool` uses `Mutex<FdPool>` for interior mutability. The `Storage` trait methods themselves never take `&mut self`.
 4. **Vectored I/O is not on the trait** (ADR-0004 invariant #2). If per-file scatter/gather becomes a hot path, it lives on `MultiFileStorage` as an inherent method.
 
+### Resource bounds (DoS hardening)
+
+Untrusted torrent metadata is attacker-controlled, so the constructor caps every unbounded dimension before any allocation proportional to it:
+
+- **`MAX_ENTRIES = 100_000`** — caps the number of files in one layout. Typical torrents have dozens; pathological attacker torrents declaring millions of entries are rejected before `Vec<FileEntry>` is allocated at malicious scale.
+- **`MAX_PATH_COMPONENT_LEN = 255` bytes** — matches `NAME_MAX` on ext4/XFS/APFS. Protects against a torrent declaring a gigabyte-long component that would OOM before the filesystem ever sees it.
+- Total length overflow (sum of entry lengths > `u64::MAX`) is rejected via `checked_add` during validation.
+- `FdPool` cap is clamped to `[4, 65_536]` — at upper bound one pool contributes <0.1% of `u32::MAX` fds, safely inside any real `ulimit -n`.
+
+### Symlink-escape defences
+
+1. `check_path_stays_under_root` calls `symlink_metadata(leaf)` first and rejects any existing symlink — regardless of target — before the `canonicalize` walk. This catches dangling-symlink-leaf attacks where `OpenOptions::create(true).truncate(true)` would otherwise follow the symlink and create the target outside the download root.
+2. The `canonicalize` walk treats only `NotFound` as a reason to walk to the parent. Any other error (permission denied, interrupted, etc.) fails closed — no guessing.
+3. A second `symlink_metadata` check runs immediately before `OpenOptions::new().create(true)` to narrow the TOCTOU window between path check and open. A racing attacker can still swap in a symlink between the last check and `open`, but that attacker already has local write access to the download root, which is a strictly more invasive threat than the one this backend is designed to resist.
+
 ### Offset mapping
 
 `write_block(offset, buf)` and `read_block(offset, buf)` both use the same routine:
@@ -104,6 +119,16 @@ Neutral:
 
 - Single-file torrents continue to use `FileStorage`. Consumers choose at `AddTorrentRequest::storage` construction time based on parsed metainfo. No runtime mode-switch.
 - A convenience bridge (`MultiFileStorage::from_info_v1(root, info)`) can live in `magpie-bt-core` to keep `magpie-bt-metainfo` dependency-free. Decided at implementation time.
+
+### Known limitations (documented, not fixed in M2)
+
+These are accepted gaps that a consumer operating in a higher-trust environment should be aware of:
+
+- **Case-insensitive filesystem collisions (APFS, NTFS).** On macOS's default APFS case-insensitive variant and on Windows NTFS, `"File"` and `"file"` map to the same on-disk file. Our duplicate-path check compares paths byte-wise, so a torrent declaring both as distinct entries will pass validation; the two entries will then stomp each other on disk. Mitigation would require filesystem-type detection or case-folded comparison; deferred.
+- **Unicode normalization collisions.** `"café"` in NFC (1 code point `é`) and NFD (`e` + combining acute) are different byte strings but the same path on macOS HFS+/APFS. Same collision class as the case issue. Deferred.
+- **TOCTOU between `check_path_stays_under_root` and `open`.** A local attacker with write access to the download root can swap in a symlink in the microseconds between our last check and `open`. Resolving this properly needs `openat(dirfd, O_NOFOLLOW)` under the `#[deny(unsafe_code)]` discipline, which requires a crate like `cap-std` or a controlled `unsafe` exception.
+- **No total-capacity cap.** A torrent declaring 100 TB will `set_len(100TB)` on each file. On sparse filesystems (ext4 default, APFS, NTFS) this is O(1); on non-sparse filesystems (FAT32) it fills the disk. The backend does not second-guess the torrent size — consumers that want a capacity ceiling should validate `info.v1.files.*.length` sum before calling `create_from_info`.
+- **Windows reserved names.** `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9` have special meaning on Windows. The backend is Unix-only (`#[cfg(unix)]`) so this is not an issue today; a future Windows port would need to extend path validation.
 
 ## Alternatives considered
 

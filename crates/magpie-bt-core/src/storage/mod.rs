@@ -40,5 +40,7 @@ pub use error::{StorageError, StorageErrorKind};
 pub use file::FileStorage;
 pub use memory::MemoryStorage;
 #[cfg(unix)]
-pub use multi_file::{FdPool, FileSpec, MultiFileStorage};
+pub use multi_file::{
+    FdPool, FileSpec, MAX_ENTRIES, MAX_PATH_COMPONENT_LEN, MultiFileStorage,
+};
 pub use traits::{IoVec, IoVecMut, Storage};

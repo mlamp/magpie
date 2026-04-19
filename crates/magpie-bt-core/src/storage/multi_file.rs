@@ -26,6 +26,22 @@ use super::traits::Storage;
 /// instance process-wide.
 static NEXT_STORAGE_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Cap on the number of files in one layout.
+///
+/// Typical torrents have dozens; extreme cases (game installs, dataset
+/// dumps) hit a few thousand. 100k is generously over that and protects
+/// the library against a malformed or adversarial torrent declaring
+/// millions of entries (`Vec<FileEntry>` OOM).
+pub const MAX_ENTRIES: usize = 100_000;
+
+/// Cap on a single path-component length in bytes.
+///
+/// Matches `NAME_MAX` on ext4/XFS/APFS/HFS+. Legitimate BitTorrent paths
+/// fit well under this; the cap exists to reject malicious torrents
+/// declaring gigabyte-long components that would OOM the process before
+/// the filesystem ever sees them.
+pub const MAX_PATH_COMPONENT_LEN: usize = 255;
+
 // ---------------------------------------------------------------------------
 // Public user-facing types
 // ---------------------------------------------------------------------------
@@ -66,6 +82,12 @@ struct FileEntry {
 /// Validate and resolve `specs` into a sorted list of [`FileEntry`], and
 /// return the total capacity (sum of lengths).
 fn validate_specs(specs: &[FileSpec]) -> Result<(Vec<FileEntry>, u64), StorageError> {
+    if specs.len() > MAX_ENTRIES {
+        return Err(StorageError::new(StorageErrorKind::Path(format!(
+            "too many entries: {} (max {MAX_ENTRIES})",
+            specs.len()
+        ))));
+    }
     let mut entries = Vec::with_capacity(specs.len());
     let mut seen_paths: HashMap<PathBuf, usize> = HashMap::with_capacity(specs.len());
     let mut running: u64 = 0;
@@ -109,6 +131,12 @@ fn validate_path_components(components: &[String]) -> Result<PathBuf, String> {
     for (i, comp) in components.iter().enumerate() {
         if comp.is_empty() {
             return Err(format!("component {i} is empty"));
+        }
+        if comp.len() > MAX_PATH_COMPONENT_LEN {
+            return Err(format!(
+                "component {i} is {} bytes (max {MAX_PATH_COMPONENT_LEN})",
+                comp.len()
+            ));
         }
         if comp == "." || comp == ".." {
             return Err(format!("component {i} is {comp:?} (reserved)"));
@@ -368,6 +396,21 @@ impl MultiFileStorage {
                         )))
                     })?;
                 }
+                // Second line of defense: re-check for a symlink at the
+                // leaf immediately before open, to narrow the TOCTOU
+                // window with `check_path_stays_under_root`. A racing
+                // attacker can still swap in a symlink between this and
+                // `open`, but for that they already need local write
+                // access to the download root — a much more invasive
+                // threat than the one we're guarding against.
+                if let Ok(md) = std::fs::symlink_metadata(&full)
+                    && md.file_type().is_symlink()
+                {
+                    return Err(StorageError::new(StorageErrorKind::Path(format!(
+                        "entry {idx}: {} exists as a symlink; refusing to create through it",
+                        full.display()
+                    ))));
+                }
                 let file = std::fs::OpenOptions::new()
                     .read(true)
                     .write(true)
@@ -491,9 +534,25 @@ impl MultiFileStorage {
 }
 
 /// Reject if `full` resolves outside `root`. We tolerate missing leaves
-/// (the file doesn't exist yet) by walking upward until we hit something
-/// that does exist, canonicalising that, and checking containment.
+/// (the file doesn't exist yet) by walking upward *only on* `NotFound`,
+/// checking containment against the nearest real ancestor.
+///
+/// Explicitly rejects symlink leaves (including dangling symlinks): if
+/// `symlink_metadata(full)` reports a symlink, we refuse even if
+/// `canonicalize` would walk through it. Without this, a pre-existing
+/// dangling symlink `dir/file -> /etc/target` would let
+/// `OpenOptions::create(true).truncate(true)` create `/etc/target`.
 fn check_path_stays_under_root(root: &Path, full: &Path) -> Result<(), String> {
+    // Leaf symlink check: refuse regardless of where it points, because
+    // `create(true)` will follow it.
+    if let Ok(md) = std::fs::symlink_metadata(full)
+        && md.file_type().is_symlink()
+    {
+        return Err(format!(
+            "{} exists as a symlink; refusing to open through it",
+            full.display()
+        ));
+    }
     let mut anchor: PathBuf = full.to_path_buf();
     loop {
         match anchor.canonicalize() {
@@ -508,13 +567,22 @@ fn check_path_stays_under_root(root: &Path, full: &Path) -> Result<(), String> {
                     root.display()
                 ));
             }
-            Err(_) => {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                // Missing intermediate dir or leaf — walk up.
                 if !anchor.pop() {
                     return Err(format!(
                         "cannot resolve any ancestor of {}",
                         full.display()
                     ));
                 }
+            }
+            Err(e) => {
+                // Permission-denied, interrupted, or any other error:
+                // refuse to guess — fail closed.
+                return Err(format!(
+                    "cannot canonicalise {}: {e}",
+                    anchor.display()
+                ));
             }
         }
     }
@@ -1026,6 +1094,54 @@ mod tests {
             MultiFileStorage::open(dir.path(), &[spec(&["f"], 100)], pool).unwrap_err();
         let msg = path_err(err);
         assert!(msg.contains("has len"), "msg={msg}");
+    }
+
+    #[test]
+    fn too_many_entries_rejected() {
+        let specs: Vec<FileSpec> = (0..=MAX_ENTRIES)
+            .map(|i| spec(&[&format!("f{i}")], 1))
+            .collect();
+        let err = validate_specs(&specs).unwrap_err();
+        let msg = path_err(err);
+        assert!(msg.contains("too many entries"), "msg={msg}");
+    }
+
+    #[test]
+    fn component_too_long_rejected() {
+        let long = "a".repeat(MAX_PATH_COMPONENT_LEN + 1);
+        let err = validate_specs(&[FileSpec { path: vec![long], length: 1 }]).unwrap_err();
+        let msg = path_err(err);
+        assert!(msg.contains("bytes"), "msg={msg}");
+    }
+
+    #[test]
+    fn component_at_limit_accepted() {
+        // Exactly MAX_PATH_COMPONENT_LEN must be accepted (boundary).
+        let at_limit = "a".repeat(MAX_PATH_COMPONENT_LEN);
+        let (entries, _) = validate_specs(&[FileSpec { path: vec![at_limit], length: 1 }])
+            .expect("exactly MAX_PATH_COMPONENT_LEN must be accepted");
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn dangling_symlink_leaf_rejected() {
+        // A pre-existing dangling symlink at the leaf would let
+        // OpenOptions::create(true).truncate(true) create the target.
+        let dir = tempfile::tempdir().unwrap();
+        let leaf = dir.path().join("evil");
+        std::os::unix::fs::symlink("/nonexistent/target", &leaf).unwrap();
+        let pool = Arc::new(FdPool::with_cap(4));
+        let err = MultiFileStorage::create(
+            dir.path(),
+            &[spec(&["evil"], 10)],
+            pool,
+        )
+        .unwrap_err();
+        let msg = path_err(err);
+        assert!(
+            msg.contains("symlink"),
+            "msg={msg}"
+        );
     }
 
     #[test]
