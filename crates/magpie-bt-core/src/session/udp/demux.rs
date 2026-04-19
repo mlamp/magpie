@@ -74,6 +74,7 @@ pub enum DemuxError {
     DuplicateTransactionId(u32),
 }
 
+#[derive(Debug)]
 struct PendingTxn {
     sender: oneshot::Sender<TrackerResponse>,
     expires_at: Instant,
@@ -86,6 +87,7 @@ struct PendingTxn {
 /// task ([`JoinHandle`]) runs until every [`Arc<UdpDemux>`] clone is dropped
 /// **and** the socket is closed — in practice, hold a clone for the lifetime
 /// of the [`crate::engine::Engine`].
+#[derive(Debug)]
 pub struct UdpDemux {
     socket: Arc<UdpSocket>,
     pending: Arc<StdMutex<HashMap<u32, PendingTxn>>>,

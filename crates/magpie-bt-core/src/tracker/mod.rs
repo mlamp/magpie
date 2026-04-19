@@ -26,6 +26,7 @@ pub mod udp;
 pub use error::TrackerError;
 pub use http::{HttpTracker, build_announce_url, parse_response};
 pub use tiered::TieredTracker;
+pub use udp::{MAX_ATTEMPTS as UDP_TRACKER_MAX_ATTEMPTS, UdpTracker};
 
 // Re-export for documentation references.
 pub use AnnounceFuture as _AnnounceFutureMarker;

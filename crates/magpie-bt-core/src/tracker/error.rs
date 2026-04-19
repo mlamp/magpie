@@ -21,4 +21,11 @@ pub enum TrackerError {
     /// The compact peer list was not a multiple of the per-entry size (6 for v4, 18 for v6).
     #[error("malformed compact peer list: length {0} is not a multiple of {1}")]
     CompactPeersTruncated(usize, usize),
+    /// UDP transport failure — socket I/O, demux registration, or the
+    /// full BEP 15 retry curve exhausted without a response.
+    #[error("UDP transport error: {0}")]
+    Udp(String),
+    /// Announce did not complete within the retry budget.
+    #[error("announce timed out after {0} attempts")]
+    Timeout(u32),
 }

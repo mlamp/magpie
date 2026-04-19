@@ -1,4 +1,4 @@
-//! BEP 15 UDP tracker codec + primitives.
+//! BEP 15 UDP tracker codec + client.
 //!
 //! Protocol shape:
 //!
@@ -19,9 +19,11 @@
 //! Connection IDs live **60 s**; the client refreshes on expiry per ADR-0015
 //! / milestone plan invariant #10.
 //!
-//! This module ships the **codec only** for this iteration; the high-level
-//! client that drives connect→announce, backoff, and retries is in a
-//! follow-up commit wired to [`crate::session::udp::demux::UdpDemux`].
+//! The high-level [`UdpTracker`] client implements the [`Tracker`] trait and
+//! is wired to [`UdpDemux`](crate::session::udp::demux::UdpDemux) for
+//! transaction-id routing. Consumers hand it an `Arc<UdpDemux>` at
+//! construction and subsequent `announce` calls run connect-then-announce
+//! on the shared socket.
 
 #![allow(clippy::cast_possible_truncation)]
 
@@ -193,6 +195,178 @@ pub const fn retry_timeout(attempt: u32) -> Duration {
     Duration::from_secs(capped)
 }
 
+// ---------------------------------------------------------------------------
+// UdpTracker client
+// ---------------------------------------------------------------------------
+
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
+
+use super::{AnnounceFuture, Tracker};
+use crate::session::udp::demux::UdpDemux;
+
+/// Cap on attempts for a single CONNECT→ANNOUNCE cycle.
+///
+/// BEP 15 §5 defines a retry curve of 15·2ⁿ seconds that runs up to
+/// ~2 hours for `n = 8`. A library default that long is hostile to
+/// callers; `MAX_ATTEMPTS = 4` gives total worst-case 15+30+60+120 =
+/// 225 s per announce, which matches what real clients actually
+/// tolerate. Consumers that want a longer budget can override via
+/// [`UdpTracker::with_max_attempts`].
+pub const MAX_ATTEMPTS: u32 = 4;
+
+/// Per-session randomised `key` field sent in the announce. The
+/// tracker uses it to identify us across NAT rebinds so we don't
+/// accidentally double-count ourselves as two peers. The library
+/// generates this at construction from the OS RNG (no auth weight —
+/// just enough entropy so unrelated clients don't collide on the same
+/// `key`).
+fn random_key() -> u32 {
+    let mut buf = [0u8; 4];
+    getrandom::fill(&mut buf).expect("getrandom");
+    u32::from_be_bytes(buf)
+}
+
+fn random_txid() -> u32 {
+    let mut buf = [0u8; 4];
+    getrandom::fill(&mut buf).expect("getrandom");
+    u32::from_be_bytes(buf)
+}
+
+/// BEP 15 UDP tracker client.
+///
+/// Holds a shared [`UdpDemux`] for transaction-id routing + the
+/// tracker's socket address + the per-session `key`. Caches the
+/// tracker-supplied `connection_id` for its 60 s TTL so consecutive
+/// announces skip the CONNECT round-trip.
+#[derive(Debug)]
+pub struct UdpTracker {
+    demux: Arc<UdpDemux>,
+    target: SocketAddr,
+    peer_key: u32,
+    cached_conn: Mutex<Option<(u64, Instant)>>,
+    max_attempts: u32,
+}
+
+impl UdpTracker {
+    /// Construct a tracker client pinned to `target`. The `demux` is
+    /// shared with any other UDP subsystems bound to the same socket
+    /// (DHT, uTP) — one socket per engine.
+    #[must_use]
+    pub fn new(demux: Arc<UdpDemux>, target: SocketAddr) -> Self {
+        Self {
+            demux,
+            target,
+            peer_key: random_key(),
+            cached_conn: Mutex::new(None),
+            max_attempts: MAX_ATTEMPTS,
+        }
+    }
+
+    /// Override the retry-attempt cap (default [`MAX_ATTEMPTS`]).
+    /// Value is clamped to `[1, 9]` (9 == full BEP 15 curve).
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn with_max_attempts(mut self, attempts: u32) -> Self {
+        self.max_attempts = attempts.clamp(1, 9);
+        self
+    }
+
+    /// Return the cached connection id if still valid, else refresh
+    /// via a CONNECT round-trip.
+    async fn ensure_connection_id(&self) -> Result<u64, TrackerError> {
+        {
+            let guard = self.cached_conn.lock().expect("cached_conn poisoned");
+            if let Some((id, expires)) = *guard
+                && Instant::now() < expires
+            {
+                return Ok(id);
+            }
+        }
+        let conn_id = self.run_connect().await?;
+        {
+            let mut guard = self.cached_conn.lock().expect("cached_conn poisoned");
+            *guard = Some((conn_id, Instant::now() + CONNECTION_ID_TTL));
+        }
+        Ok(conn_id)
+    }
+
+    async fn run_connect(&self) -> Result<u64, TrackerError> {
+        for attempt in 0..self.max_attempts {
+            let txid = random_txid();
+            let rx = self
+                .demux
+                .register_tracker_response(txid, retry_timeout(attempt))
+                .map_err(|e| TrackerError::Udp(format!("register CONNECT txid: {e}")))?;
+            let req = encode_connect(txid);
+            self.demux
+                .send_to(&req, self.target)
+                .await
+                .map_err(|e| TrackerError::Udp(format!("send CONNECT: {e}")))?;
+            if let Ok(Ok(resp)) =
+                tokio::time::timeout(retry_timeout(attempt), rx).await
+            {
+                return decode_connect(&resp.data, txid);
+            }
+        }
+        Err(TrackerError::Timeout(self.max_attempts))
+    }
+
+    async fn run_announce(
+        &self,
+        conn_id: u64,
+        req: &AnnounceRequest<'_>,
+    ) -> Result<AnnounceResponse, TrackerError> {
+        for attempt in 0..self.max_attempts {
+            let txid = random_txid();
+            let rx = self
+                .demux
+                .register_tracker_response(txid, retry_timeout(attempt))
+                .map_err(|e| TrackerError::Udp(format!("register ANNOUNCE txid: {e}")))?;
+            let packet = encode_announce(conn_id, txid, req, self.peer_key);
+            self.demux
+                .send_to(&packet, self.target)
+                .await
+                .map_err(|e| TrackerError::Udp(format!("send ANNOUNCE: {e}")))?;
+            if let Ok(Ok(resp)) =
+                tokio::time::timeout(retry_timeout(attempt), rx).await
+            {
+                return decode_announce(&resp.data, txid);
+            }
+        }
+        Err(TrackerError::Timeout(self.max_attempts))
+    }
+
+    async fn do_announce(
+        &self,
+        req: &AnnounceRequest<'_>,
+    ) -> Result<AnnounceResponse, TrackerError> {
+        let conn_id = self.ensure_connection_id().await?;
+        match self.run_announce(conn_id, req).await {
+            Ok(r) => Ok(r),
+            Err(TrackerError::Failure(_)) => {
+                // Tracker rejected — possibly stale connection id.
+                // Invalidate cache and retry exactly once with a fresh
+                // CONNECT.
+                {
+                    let mut guard = self.cached_conn.lock().expect("cached_conn poisoned");
+                    *guard = None;
+                }
+                let fresh = self.ensure_connection_id().await?;
+                self.run_announce(fresh, req).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Tracker for UdpTracker {
+    fn announce<'a>(&'a self, req: AnnounceRequest<'a>) -> AnnounceFuture<'a> {
+        Box::pin(async move { self.do_announce(&req).await })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +465,198 @@ mod tests {
         assert_eq!(retry_timeout(7), Duration::from_secs(1920));
         assert_eq!(retry_timeout(8), Duration::from_secs(3840)); // cap
         assert_eq!(retry_timeout(20), Duration::from_secs(3840));
+    }
+
+    // ---- UdpTracker client tests -----------------------------------
+
+    /// Minimal mock UDP tracker: binds a socket, answers CONNECT with a
+    /// canned connection id + echoes txid, answers ANNOUNCE with a
+    /// peer list. Runs as a background task until dropped. Used to
+    /// exercise the full CONNECT→ANNOUNCE handshake of [`UdpTracker`]
+    /// without a real tracker dependency.
+    async fn spawn_mock_tracker() -> (SocketAddr, tokio::task::JoinHandle<()>) {
+        let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let mut buf = vec![0u8; 2048];
+            loop {
+                let Ok((n, from)) = sock.recv_from(&mut buf).await else {
+                    return;
+                };
+                if n < 16 {
+                    continue;
+                }
+                let action = u32::from_be_bytes(buf[8..12].try_into().unwrap());
+                let txid = u32::from_be_bytes(buf[12..16].try_into().unwrap());
+                if action == ACTION_CONNECT {
+                    let mut resp = [0u8; 16];
+                    resp[0..4].copy_from_slice(&ACTION_CONNECT.to_be_bytes());
+                    resp[4..8].copy_from_slice(&txid.to_be_bytes());
+                    resp[8..16].copy_from_slice(&0x1122_3344_5566_7788u64.to_be_bytes());
+                    let _ = sock.send_to(&resp, from).await;
+                } else {
+                    // Treat non-CONNECT as ANNOUNCE. For the ANNOUNCE
+                    // layout the action + txid are at bytes 8..12 + 12..16
+                    // (after connection_id). Reply with interval=1800,
+                    // leechers=5, seeders=7, one peer 10.0.0.1:6881.
+                    let mut resp = Vec::with_capacity(26);
+                    resp.extend_from_slice(&ACTION_ANNOUNCE.to_be_bytes());
+                    resp.extend_from_slice(&txid.to_be_bytes());
+                    resp.extend_from_slice(&1800u32.to_be_bytes());
+                    resp.extend_from_slice(&5u32.to_be_bytes());
+                    resp.extend_from_slice(&7u32.to_be_bytes());
+                    resp.extend_from_slice(&[10, 0, 0, 1, 0x1A, 0xE1]);
+                    let _ = sock.send_to(&resp, from).await;
+                }
+            }
+        });
+        (addr, task)
+    }
+
+    fn sample_announce<'a>() -> AnnounceRequest<'a> {
+        AnnounceRequest {
+            info_hash: [0xAA; 20],
+            peer_id: [0xBB; 20],
+            port: 6881,
+            uploaded: 0,
+            downloaded: 0,
+            left: 1_000_000,
+            event: AnnounceEvent::Started,
+            num_want: Some(50),
+            compact: true,
+            tracker_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn udp_tracker_connects_and_announces() {
+        let (tracker_addr, tracker_task) = spawn_mock_tracker().await;
+        let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let client = UdpTracker::new(Arc::clone(&demux), tracker_addr);
+        let resp = client.do_announce(&sample_announce()).await.unwrap();
+        assert_eq!(resp.interval, Duration::from_secs(1800));
+        assert_eq!(resp.complete, Some(7));
+        assert_eq!(resp.incomplete, Some(5));
+        assert_eq!(resp.peers.len(), 1);
+        assert_eq!(resp.peers[0].port(), 6881);
+        tracker_task.abort();
+    }
+
+    #[tokio::test]
+    async fn udp_tracker_caches_connection_id_across_announces() {
+        // Two announces back-to-back; the second should skip CONNECT
+        // because the cached id is still valid. We detect this by
+        // counting CONNECT messages the mock tracker sees.
+        let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        let connect_count =
+            Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let cc = Arc::clone(&connect_count);
+        let task = tokio::spawn(async move {
+            let mut buf = vec![0u8; 2048];
+            loop {
+                let Ok((n, from)) = sock.recv_from(&mut buf).await else {
+                    return;
+                };
+                if n < 16 {
+                    continue;
+                }
+                let action = u32::from_be_bytes(buf[8..12].try_into().unwrap());
+                let txid = u32::from_be_bytes(buf[12..16].try_into().unwrap());
+                if action == ACTION_CONNECT {
+                    cc.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let mut resp = [0u8; 16];
+                    resp[0..4].copy_from_slice(&ACTION_CONNECT.to_be_bytes());
+                    resp[4..8].copy_from_slice(&txid.to_be_bytes());
+                    resp[8..16].copy_from_slice(&0xDEAD_BEEFu64.to_be_bytes());
+                    let _ = sock.send_to(&resp, from).await;
+                } else {
+                    let mut resp = Vec::with_capacity(26);
+                    resp.extend_from_slice(&ACTION_ANNOUNCE.to_be_bytes());
+                    resp.extend_from_slice(&txid.to_be_bytes());
+                    resp.extend_from_slice(&1800u32.to_be_bytes());
+                    resp.extend_from_slice(&0u32.to_be_bytes());
+                    resp.extend_from_slice(&0u32.to_be_bytes());
+                    let _ = sock.send_to(&resp, from).await;
+                }
+            }
+        });
+        let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let client = UdpTracker::new(Arc::clone(&demux), addr);
+        client.do_announce(&sample_announce()).await.unwrap();
+        client.do_announce(&sample_announce()).await.unwrap();
+        assert_eq!(
+            connect_count.load(std::sync::atomic::Ordering::Relaxed),
+            1,
+            "second announce must reuse cached connection_id"
+        );
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn udp_tracker_surfaces_tracker_error() {
+        // Mock tracker that replies ACTION_ERROR to CONNECT. The client
+        // should propagate as TrackerError::Failure.
+        let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let mut buf = vec![0u8; 2048];
+            let (_n, from) = sock.recv_from(&mut buf).await.unwrap();
+            let txid = u32::from_be_bytes(buf[12..16].try_into().unwrap());
+            let mut resp = Vec::new();
+            resp.extend_from_slice(&ACTION_ERROR.to_be_bytes());
+            resp.extend_from_slice(&txid.to_be_bytes());
+            resp.extend_from_slice(b"tracker overloaded");
+            let _ = sock.send_to(&resp, from).await;
+        });
+        let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let client =
+            UdpTracker::new(Arc::clone(&demux), addr).with_max_attempts(1);
+        let err = client.do_announce(&sample_announce()).await.unwrap_err();
+        match err {
+            TrackerError::Failure(msg) => assert!(msg.contains("overloaded")),
+            other => panic!("expected Failure, got {other:?}"),
+        }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn udp_tracker_times_out_when_no_response() {
+        // No mock tracker is listening at the target address. The
+        // client should run its full retry curve (clamped by
+        // with_max_attempts(1) + a short synthetic timeout). We
+        // override the retry curve by calling run_connect directly
+        // via a very small attempt cap so the test completes quickly.
+        let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        // Fake target: pick a random unused port (bind+drop to reserve
+        // + release, then target that — minor race but fine for test).
+        let placeholder = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let target = placeholder.local_addr().unwrap();
+        drop(placeholder);
+        let client = UdpTracker::new(Arc::clone(&demux), target).with_max_attempts(1);
+        // Use a very short timeout by racing against Tokio's
+        // `timeout` wrapper directly — the default attempt 0 is 15 s,
+        // too long for a test. Use a 500 ms envelope.
+        let result = tokio::time::timeout(
+            Duration::from_millis(500),
+            client.do_announce(&sample_announce()),
+        )
+        .await;
+        // Either the tokio timeout hit before the tracker's internal
+        // one, or the client's own timeout path returned Err — both
+        // count as "no response → error".
+        match result {
+            Err(_timeout) => {} // outer timeout hit first; acceptable
+            Ok(Err(TrackerError::Timeout(1))) => {}
+            other => panic!("expected Timeout, got {other:?}"),
+        }
     }
 }

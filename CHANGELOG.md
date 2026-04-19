@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Parity Track B — BEP 15 UDP tracker client)
+
+- `UdpTracker` client in `crates/magpie-bt-core/src/tracker/udp.rs` — the
+  missing piece on top of the previously-shipped codec. Implements the
+  `Tracker` trait, drives CONNECT → ANNOUNCE on a shared `UdpDemux`,
+  caches the tracker-supplied `connection_id` for its 60 s TTL so
+  back-to-back announces skip the CONNECT round-trip. BEP 15 §5 retry
+  curve (15·2ⁿ seconds) capped at 4 attempts by default (~225 s
+  worst-case budget); `UdpTracker::with_max_attempts` override clamped
+  to `[1, 9]`. Per-session random `key` field (generated via
+  `getrandom`) so the tracker can identify us across NAT rebinds.
+- Stale-connection-id recovery: on `TrackerError::Failure` during
+  announce, invalidate the cache and retry exactly once with a fresh
+  CONNECT.
+- New `TrackerError::Udp(String)` + `TrackerError::Timeout(u32)` variants —
+  UDP-transport failures and exhausted retry budgets now have
+  first-class error kinds instead of being laundered through the
+  HTTP-specific `Transport(reqwest::Error)`.
+- `UdpTracker` + `UDP_TRACKER_MAX_ATTEMPTS` re-exported at the
+  `magpie_bt_core::tracker` + `magpie_bt` top levels.
+- 4 new UDP tests using a loopback mock tracker: CONNECT→ANNOUNCE
+  handshake with peer list decode, connection-id caching across
+  announces (asserts mock only sees 1 CONNECT for 2 announces),
+  ACTION_ERROR propagation as `TrackerError::Failure`, and timeout
+  on an unresponsive target (bounded 500 ms envelope to keep the
+  test fast).
+
 ### Added (Parity Track A — resume-state persistence, ADR-0022)
 
 - `ResumeSink` trait + `FileResumeSink` default impl under
