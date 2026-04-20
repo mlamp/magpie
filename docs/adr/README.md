@@ -69,3 +69,6 @@ Short notes on options we did not pick, and why.
 | [0021](0021-multi-file-storage.md) | Multi-file storage: `MultiFileStorage` impl of the existing `Storage` trait, sorted entries + bounded LRU fd pool | proposed |
 | [0022](0022-resume-state.md) | Resume-state persistence: `ResumeSink` + `FileResumeSink` bencode sidecar | proposed |
 | [0023](0023-super-seeding.md) | Super-seeding (BEP 16): `SuperSeedChoker` + per-peer `RevealState` | proposed (design only) |
+| [0024](0024-dht-routing-table.md) | DHT routing table: split-on-demand binary tree, K=8, quality state machine | proposed |
+| [0025](0025-dht-bootstrap.md) | DHT bootstrap: three-source contact list + persistent cache | proposed |
+| [0026](0026-dht-tokens-and-rate-limits.md) | DHT tokens (stateless HMAC), BEP 42 node ID, token-bucket rate limits | proposed |
