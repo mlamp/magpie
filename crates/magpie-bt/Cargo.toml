@@ -28,11 +28,11 @@ test-support = ["magpie-bt-metainfo/test-support"]
 dht = ["magpie-bt-core/dht", "dep:magpie-bt-dht"]
 
 [dependencies]
-magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.2" }
-magpie-bt-core = { path = "../magpie-bt-core", version = "0.1.2" }
-magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.2" }
-magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.1.2" }
-magpie-bt-dht = { path = "../magpie-bt-dht", version = "0.1.2", optional = true }
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.3" }
+magpie-bt-core = { path = "../magpie-bt-core", version = "0.1.3" }
+magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.3" }
+magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.1.3" }
+magpie-bt-dht = { path = "../magpie-bt-dht", version = "0.1.3", optional = true }
 # Optional: heap profiling for the seeder example. Gated by the
 # `dhat-heap` feature so default builds have zero overhead.
 dhat = { workspace = true, optional = true }
