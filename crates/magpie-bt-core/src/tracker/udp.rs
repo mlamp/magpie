@@ -20,10 +20,9 @@
 //! / milestone plan invariant #10.
 //!
 //! The high-level [`UdpTracker`] client implements the [`Tracker`] trait and
-//! is wired to [`UdpDemux`](crate::session::udp::demux::UdpDemux) for
-//! transaction-id routing. Consumers hand it an `Arc<UdpDemux>` at
-//! construction and subsequent `announce` calls run connect-then-announce
-//! on the shared socket.
+//! is wired to [`crate::session::udp::demux::UdpDemux`] for transaction-id
+//! routing. Consumers hand it an `Arc<UdpDemux>` at construction and
+//! subsequent `announce` calls run connect-then-announce on the shared socket.
 
 #![allow(clippy::cast_possible_truncation)]
 
