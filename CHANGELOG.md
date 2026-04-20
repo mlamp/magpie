@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream F/part — peer store)
+
+In-memory info-hash → peer registry, the backing state for
+`announce_peer` / `get_peers` handlers.
+
+- `PeerStore::announce(hash, peer, now)` / `peers_for(hash, limit)`
+  return peers most-recently-announced first.
+- Memory caps: `max_torrents = 1 000`, `max_peers_per_torrent = 100`.
+  Slot-full torrents evict least-recently-announced; slot-full
+  peer sets evict the stalest peer.
+- `sweep(now)` drops peers older than `peer_staleness` (30 min
+  default, matches typical BEP 5 re-announce cadence) and empty
+  torrents.
+- 9 new unit tests for round-trip, limit, recency ordering,
+  sweep + empty-torrent prune, torrent-cap LRU eviction, per-
+  torrent-peer-cap stalest eviction.
+
+Private-flag enforcement (the other half of workstream F) sits
+at the public-API layer and lands with the dispatch-loop commit.
+
+Crate-total: 106 unit tests + 1 doc-test.
+
 ### Added (M4 workstream E/2 — three-tier token-bucket rate limits)
 
 ADR-0026's per-IP + global inbound + per-remote outbound caps.

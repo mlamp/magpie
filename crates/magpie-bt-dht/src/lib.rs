@@ -44,6 +44,7 @@
 mod bucket;
 mod krpc;
 mod node_id;
+mod peer_store;
 mod rate_limit;
 mod routing_table;
 mod tokens;
@@ -59,6 +60,10 @@ pub use krpc::{
     MAX_TRANSACTION_ID_LEN, MAX_VALUES_PEERS, Query, Response,
 };
 pub use node_id::{Distance, LocalNodeId, NodeId, generate_node_id, validate_bep42};
+pub use peer_store::{
+    DEFAULT_MAX_PEERS_PER_TORRENT, DEFAULT_MAX_TORRENTS, DEFAULT_PEER_STALENESS, PeerStore,
+    PeerStoreConfig,
+};
 pub use rate_limit::{
     DEFAULT_BUCKET_IDLE, DEFAULT_INBOUND_GLOBAL_BURST, DEFAULT_INBOUND_GLOBAL_QPS,
     DEFAULT_INBOUND_PER_IP_BURST, DEFAULT_INBOUND_PER_IP_QPS, DEFAULT_OUTBOUND_PER_NODE_BURST,
