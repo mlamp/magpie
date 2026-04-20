@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream C — DHT routing table)
+
+Split-on-demand Kademlia routing table per ADR-0024, layered on
+top of the workstream-A data model.
+
+- `RoutingTable::new(local_id, now)` starts with a single bucket
+  covering `[ZERO, MAX]`. `insert` returns a structured
+  `Insertion` (`Added` / `Updated` / `Evicted(NodeId)` /
+  `PendingPing(NodeId)` / `Rejected`) so the async DHT task can
+  drive pings + eviction side-effects without the table owning
+  them.
+- Eviction priority follows ADR-0024 step-by-step: Bad first,
+  then split if local, then surface a Questionable for the
+  caller to ping, else reject.
+- `find_closest(target, n)` returns up to `n` nodes by ascending
+  XOR distance — drives `find_node` / `get_peers` handlers.
+- `sweep_quality(now)` marks stale Good → Questionable on the
+  60-s cadence; `prune_bad(now)` removes Bad nodes past the 4-h
+  grace window and returns their ids so side-state can be
+  purged.
+- `stale_buckets(now)` surfaces bucket indices past
+  `BUCKET_REFRESH_AFTER` (15 min) for the refresh timer.
+- `NodeId::MAX` published for external use (upper bound of the
+  id space).
+- 19 new unit tests including a split-invariants sweep (ranges
+  disjoint + contiguous + covering `[ZERO, MAX]` after a
+  multi-step split sequence) and a Kademlia ordering check.
+  Crate-total: 65 unit tests + 1 doc-test.
+
 ### Added (M4 workstream A — DHT crate skeleton + wire types)
 
 First slice of the M4 DHT milestone: a new workspace member

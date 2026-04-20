@@ -33,6 +33,10 @@ impl NodeId {
     /// All-zero node id; useful as a lower bound or sentinel.
     pub const ZERO: Self = Self { bytes: [0; 20] };
 
+    /// All-ones node id (2^160 − 1); the inclusive upper bound of
+    /// the Kademlia id space.
+    pub const MAX: Self = Self { bytes: [0xff; 20] };
+
     /// Wrap 20 raw bytes as a `NodeId`.
     #[must_use]
     pub const fn from_bytes(bytes: [u8; 20]) -> Self {

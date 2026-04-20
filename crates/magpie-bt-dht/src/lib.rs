@@ -44,6 +44,7 @@
 mod bucket;
 mod krpc;
 mod node_id;
+mod routing_table;
 
 pub use bucket::{
     BAD_REMOVE_AFTER, Bucket, K, MAX_CONSECUTIVE_FAILURES, Node, NodeQuality, QUESTIONABLE_AFTER,
@@ -55,3 +56,4 @@ pub use krpc::{
     MAX_TRANSACTION_ID_LEN, MAX_VALUES_PEERS, Query, Response,
 };
 pub use node_id::{Distance, NodeId, generate_node_id, validate_bep42};
+pub use routing_table::{BUCKET_REFRESH_AFTER, Insertion, RoutingTable};
