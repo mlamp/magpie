@@ -26,6 +26,8 @@ use std::time::Instant;
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
 
+use crate::bucket::NodeQuality;
+use crate::cache::CachedContact;
 use crate::handlers::{DhtState, handle_query};
 use crate::krpc::{InfoHash, Query, Response};
 use crate::lookup::{GetPeersResult, announce_to_token_nodes, iterative_get_peers};
@@ -179,6 +181,28 @@ impl DhtRuntime {
     pub async fn seed_contact(&self, id: NodeId, addr: SocketAddr, now: Instant) {
         let mut state = self.state.lock().await;
         state.routing.insert(id, addr, now);
+    }
+
+    /// Snapshot up to `n` currently-good routing-table nodes for
+    /// persistence via
+    /// [`FileContactCache`](crate::cache::FileContactCache). v6
+    /// nodes are silently skipped (v1 cache is v4-only).
+    pub async fn snapshot_good_contacts(&self, n: usize) -> Vec<CachedContact> {
+        let mut snapshot: Vec<(NodeId, SocketAddr, Instant)> = {
+            let state = self.state.lock().await;
+            state
+                .routing
+                .iter_nodes()
+                .filter(|node| matches!(node.quality, NodeQuality::Good))
+                .map(|node| (node.id, node.addr, node.last_seen))
+                .collect()
+        };
+        snapshot.sort_by(|(_, _, a), (_, _, b)| b.cmp(a));
+        snapshot
+            .into_iter()
+            .take(n)
+            .filter_map(|(id, addr, _)| CachedContact::from_socket(id, addr))
+            .collect()
     }
 
     /// Up to `n` closest known nodes to `target` from the routing

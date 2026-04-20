@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream D-tail — persistent contact cache)
+
+ADR-0025's top-64 routing-table snapshot persisted to disk between
+runs so cold starts get a warm head-start before DNS bootstrap
+resolves.
+
+- `FileContactCache::new(path)` / `.save(&contacts)` / `.load()` —
+  bencode sidecar, atomic write-to-tmp + rename, matches
+  `FileResumeSink` from ADR-0022.
+- Caps: 64 contacts persisted, 1 MiB file ceiling (attacker defence),
+  misaligned-bytes / unsupported-version / too-large decode errors.
+- v1 scope: IPv4 only. v6 entries skipped on save, rejected on
+  load. Schema bump when v6 lands.
+- `DhtRuntime::snapshot_good_contacts(n)` produces the cache-ready
+  vector ordered by `last_seen` (recent first).
+- `cache_age(path)` helper for decaying-trust policies.
+- 9 new unit tests cover the full round-trip plus negative paths.
+
+Crate-total: 133 unit tests + 5 integration tests + 1 doc-test.
+
 ### Added (M4 workstream G — engine attach + UdpDemux adapter)
 
 Feature-gated DHT glue under the new `dht` feature (magpie-bt-core

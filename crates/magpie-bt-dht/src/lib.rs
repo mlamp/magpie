@@ -43,6 +43,7 @@
 
 mod bootstrap;
 mod bucket;
+mod cache;
 mod handlers;
 mod krpc;
 mod lookup;
@@ -61,6 +62,10 @@ pub use bootstrap::{
 };
 pub use bucket::{
     BAD_REMOVE_AFTER, Bucket, K, MAX_CONSECUTIVE_FAILURES, Node, NodeQuality, QUESTIONABLE_AFTER,
+};
+pub use cache::{
+    CACHE_MAX_CONTACTS, CACHE_MAX_FILE_BYTES, CACHE_SCHEMA_VERSION, CacheError, CachedContact,
+    FileContactCache, cache_age,
 };
 pub use handlers::{DhtState, handle_query};
 pub use krpc::{
