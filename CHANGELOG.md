@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 — DhtRuntime public handle + handler dispatch loop)
+
+Glues the pieces — [`Dht`] transport pumps, `DhtState` (routing
+table + peer store + token secrets), and `RateLimiter` — into a
+single `DhtRuntime` handle consumers hold.
+
+- `DhtRuntime::spawn(cfg, inbound_rx, outbound_tx, now)` wires
+  channel halves to the decode pump and a new handler-dispatch
+  task that: rate-checks (silent drop per ADR-0026), calls
+  `handle_query`, and sends the response back via `Dht::respond`.
+- Accessors: `client()` (the inner `Dht` for outbound queries),
+  `local_id()`, `node_count()`, `good_node_count()`,
+  `local_peers_for()`, `dropped_inbound()`, `seed_contact()` for
+  bootstrap to pre-populate the routing table.
+- 4 new async tests: inbound ping reply carries local id, bad-token
+  announce_peer → 203 reply, rate-limited flood produces exactly
+  the admitted response count (2 of 20 under tight caps), and
+  seed_contact populates the routing table.
+
+Crate-total: 119 unit tests + 1 doc-test. Workspace
+`cargo clippy --workspace --all-targets -- -D warnings` and
+`cargo doc --no-deps -p magpie-bt-dht -D warnings` clean.
+
+Remaining: iterative Kademlia lookup + `DhtRuntime::announce` (G),
+bootstrap controller (D), the three-Dht swarm gate test.
+
 ### Added (M4 workstream C-tail — RPC handlers)
 
 Pure handler functions for the four BEP 5 queries.

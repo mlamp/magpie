@@ -48,6 +48,7 @@ mod node_id;
 mod peer_store;
 mod rate_limit;
 mod routing_table;
+mod runtime;
 mod tokens;
 mod transport;
 
@@ -72,6 +73,7 @@ pub use rate_limit::{
     DEFAULT_OUTBOUND_PER_NODE_QPS, RateLimitConfig, RateLimiter,
 };
 pub use routing_table::{BUCKET_REFRESH_AFTER, Insertion, RoutingTable};
+pub use runtime::{DhtRuntime, DhtRuntimeConfig, DhtRuntimeJoins};
 pub use tokens::{TOKEN_LENGTH, TOKEN_ROTATION_INTERVAL, TokenSecrets};
 pub use transport::{
     DEFAULT_INBOUND_QUERIES_CAPACITY, DEFAULT_OUTBOUND_CAPACITY, DEFAULT_QUERY_TIMEOUT, Datagram,
