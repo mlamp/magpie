@@ -17,9 +17,12 @@ magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.2" }
 thiserror.workspace = true
 sha1.workspace = true
 getrandom.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
+tracing.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
 
 [lints]
 workspace = true

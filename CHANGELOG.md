@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream B — DHT transport pumps)
+
+Channel-driven transport plumbing for the DHT task. Deliberately
+free of any `magpie-bt-core` dependency (the crate graph goes the
+other way via feature flags); the UDP-side adapter wiring this
+into `UdpDemux` lives on the core side and is a separate change.
+
+- `Dht::spawn(config, inbound, outbound, inbound_queries)` takes
+  three `tokio::sync::mpsc` channel halves. The caller pipes
+  `inbound` from its datagram source, drains `outbound` into its
+  send loop, and reads `inbound_queries` to service peer queries.
+- `Dht::send_query(target, query).await -> Result<Response,
+  QueryError>` allocates a 2-byte txid (CSPRNG-seeded counter),
+  registers a pending oneshot, and awaits under
+  `DhtConfig::query_timeout`. Timeouts / `OutboundClosed` /
+  `Shutdown` / `Remote { code, message }` / `TooManyPending` are
+  distinct variants.
+- `Dht::respond(txid, ResponseKind, target)` for handler-side
+  replies.
+- Inbound pump: strict KRPC decode, malformed datagrams silently
+  dropped, replies whose txid is not 2 bytes ignored (eliminates
+  one amplification / spoofing vector).
+- 11 new async unit tests using in-memory channel pairs:
+  send/reply round-trip, timeout, remote-error, outbound closure,
+  unknown-txid drop, non-2-byte-txid drop, malformed drop, pump
+  shutdown waking pending queries, txid advances.
+
+Crate-total: 76 unit tests + 1 doc-test.
+
 ### Added (M4 workstream C — DHT routing table)
 
 Split-on-demand Kademlia routing table per ADR-0024, layered on

@@ -45,6 +45,7 @@ mod bucket;
 mod krpc;
 mod node_id;
 mod routing_table;
+mod transport;
 
 pub use bucket::{
     BAD_REMOVE_AFTER, Bucket, K, MAX_CONSECUTIVE_FAILURES, Node, NodeQuality, QUESTIONABLE_AFTER,
@@ -57,3 +58,7 @@ pub use krpc::{
 };
 pub use node_id::{Distance, NodeId, generate_node_id, validate_bep42};
 pub use routing_table::{BUCKET_REFRESH_AFTER, Insertion, RoutingTable};
+pub use transport::{
+    DEFAULT_INBOUND_QUERIES_CAPACITY, DEFAULT_OUTBOUND_CAPACITY, DEFAULT_QUERY_TIMEOUT, Datagram,
+    Dht, DhtConfig, InboundQuery, MAX_PENDING_QUERIES, QueryError, ResponseKind,
+};
