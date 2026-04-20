@@ -45,6 +45,7 @@ mod bucket;
 mod krpc;
 mod node_id;
 mod routing_table;
+mod tokens;
 mod transport;
 
 pub use bucket::{
@@ -56,8 +57,9 @@ pub use krpc::{
     KrpcMessage, MAX_CLIENT_VERSION_LEN, MAX_ERROR_MESSAGE_LEN, MAX_NODES_BYTES, MAX_TOKEN_LEN,
     MAX_TRANSACTION_ID_LEN, MAX_VALUES_PEERS, Query, Response,
 };
-pub use node_id::{Distance, NodeId, generate_node_id, validate_bep42};
+pub use node_id::{Distance, LocalNodeId, NodeId, generate_node_id, validate_bep42};
 pub use routing_table::{BUCKET_REFRESH_AFTER, Insertion, RoutingTable};
+pub use tokens::{TOKEN_LENGTH, TOKEN_ROTATION_INTERVAL, TokenSecrets};
 pub use transport::{
     DEFAULT_INBOUND_QUERIES_CAPACITY, DEFAULT_OUTBOUND_CAPACITY, DEFAULT_QUERY_TIMEOUT, Datagram,
     Dht, DhtConfig, InboundQuery, MAX_PENDING_QUERIES, QueryError, ResponseKind,

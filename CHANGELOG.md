@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream E — tokens + BEP 42 two-phase id)
+
+Stateless token factory + local-id manager per ADR-0026.
+
+- `TokenSecrets::new/rotate/make_token/validate` — dual-secret
+  SHA-1 design, 8-byte tokens, 15-min rotation (`TOKEN_ROTATION_INTERVAL`),
+  constant-time compare to close the timing side channel, IPv4 +
+  IPv6. A restart loses the window; peers transparently
+  re-`get_peers`.
+- `LocalNodeId::new/set_public_ip` — two-phase BEP 42 derivation:
+  un-salted cold start, re-derive when `yourip` / tracker echo
+  reveals our public address; `set_public_ip` returns whether the
+  id actually changed so the routing-table refresh can republish
+  us exactly once on change.
+- 13 new unit tests covering round-trip, rotation across one
+  interval, post-two-rotation invalidation, wrong-IP rejection,
+  wrong-length token, IPv6 tokens, and the three LocalNodeId
+  state transitions. Crate-total: 89 unit tests + 1 doc-test.
+
 ### Added (M4 workstream B-tail — UdpDemux DHT dispatch)
 
 ADR-0015 reserved a first-byte-`b'd'` branch on `UdpDemux` for a

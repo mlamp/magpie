@@ -240,6 +240,69 @@ fn crc32c(data: &[u8]) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
+// LocalNodeId — two-phase BEP 42 derivation
+// ---------------------------------------------------------------------------
+
+/// Our own DHT id, managed through BEP 42's two-phase derivation.
+///
+/// A cold-start DHT has no public-IP signal, so we mint an
+/// un-salted random id, bootstrap, and re-derive a BEP-42-salted id
+/// the moment a peer's `yourip` or a tracker-announce echo reveals
+/// our external address. ADR-0026.
+#[derive(Debug, Clone, Copy)]
+pub struct LocalNodeId {
+    id: NodeId,
+    derived_from: Option<IpAddr>,
+}
+
+impl LocalNodeId {
+    /// Initialise. When `public_ip` is `Some`, the id is already
+    /// BEP-42-salted (skip the two-phase flow). When `None`, a
+    /// random un-salted id is minted; call [`Self::set_public_ip`]
+    /// once the address is learned.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any failure from [`getrandom::fill`].
+    pub fn new(public_ip: Option<IpAddr>) -> Result<Self, getrandom::Error> {
+        let id = generate_node_id(public_ip)?;
+        Ok(Self {
+            id,
+            derived_from: public_ip,
+        })
+    }
+
+    /// Current node id.
+    #[must_use]
+    pub const fn id(&self) -> NodeId {
+        self.id
+    }
+
+    /// IP the id is currently salted for, or `None` if un-salted.
+    #[must_use]
+    pub const fn public_ip(&self) -> Option<IpAddr> {
+        self.derived_from
+    }
+
+    /// Update the public IP. If the IP is new or differs from the
+    /// current one, a fresh BEP 42-salted id is minted and the
+    /// routing table should re-announce us via its refresh sweep.
+    /// Returns `true` when the id changed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any failure from [`getrandom::fill`].
+    pub fn set_public_ip(&mut self, public_ip: IpAddr) -> Result<bool, getrandom::Error> {
+        if self.derived_from == Some(public_ip) {
+            return Ok(false);
+        }
+        self.id = generate_node_id(Some(public_ip))?;
+        self.derived_from = Some(public_ip);
+        Ok(true)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -378,5 +441,42 @@ mod tests {
         let ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
         let id = generate_node_id(Some(ip)).unwrap();
         assert!(validate_bep42(&id, ip));
+    }
+
+    // LocalNodeId — two-phase BEP 42
+
+    #[test]
+    fn local_node_id_starts_unsalted_without_ip() {
+        let lid = LocalNodeId::new(None).unwrap();
+        assert!(lid.public_ip().is_none());
+    }
+
+    #[test]
+    fn local_node_id_set_public_ip_switches_to_bep42() {
+        let mut lid = LocalNodeId::new(None).unwrap();
+        let ip: IpAddr = "203.0.113.42".parse().unwrap();
+        assert!(lid.set_public_ip(ip).unwrap(), "id must re-derive");
+        assert_eq!(lid.public_ip(), Some(ip));
+        assert!(validate_bep42(&lid.id(), ip));
+    }
+
+    #[test]
+    fn local_node_id_idempotent_for_unchanged_ip() {
+        let ip: IpAddr = "203.0.113.42".parse().unwrap();
+        let mut lid = LocalNodeId::new(Some(ip)).unwrap();
+        let id0 = lid.id();
+        assert!(!lid.set_public_ip(ip).unwrap(), "no change expected");
+        assert_eq!(lid.id(), id0);
+    }
+
+    #[test]
+    fn local_node_id_rederives_on_ip_change() {
+        let first_ip: IpAddr = "203.0.113.42".parse().unwrap();
+        let second_ip: IpAddr = "198.51.100.7".parse().unwrap();
+        let mut lid = LocalNodeId::new(Some(first_ip)).unwrap();
+        let before = lid.id();
+        assert!(lid.set_public_ip(second_ip).unwrap());
+        assert_ne!(lid.id(), before);
+        assert!(validate_bep42(&lid.id(), second_ip));
     }
 }
