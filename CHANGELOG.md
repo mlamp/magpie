@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream C-tail — RPC handlers)
+
+Pure handler functions for the four BEP 5 queries.
+
+- `handle_query(state, query, from, now) -> Result<Response, KrpcErrorPayload>`
+  over a mutable [`DhtState { local_id, routing, peers, tokens }`].
+- `ping` → local id echo, inserts sender into routing table.
+- `find_node(target)` → 8 closest compact-v4 nodes by XOR.
+- `get_peers(info_hash)` → `values` when we know peers, else
+  closest-by-XOR nodes; always carries a fresh token + local id.
+- `announce_peer` → token validation (`203 bad token` on
+  mismatch — regression-tested against both forged and cross-IP
+  tokens), implied-port honours source socket, records into peer
+  store.
+- Every handler inserts the sender into the routing table — BEP 5
+  treats a valid inbound query as liveness evidence equivalent to
+  a ping reply.
+- 9 new unit tests for all four variants + dispatch surface.
+
+Crate-total: 115 unit tests + 1 doc-test.
+
 ### Added (M4 workstream F/part — peer store)
 
 In-memory info-hash → peer registry, the backing state for

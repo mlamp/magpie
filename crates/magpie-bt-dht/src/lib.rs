@@ -42,6 +42,7 @@
 #![forbid(unsafe_code)]
 
 mod bucket;
+mod handlers;
 mod krpc;
 mod node_id;
 mod peer_store;
@@ -53,6 +54,7 @@ mod transport;
 pub use bucket::{
     BAD_REMOVE_AFTER, Bucket, K, MAX_CONSECUTIVE_FAILURES, Node, NodeQuality, QUESTIONABLE_AFTER,
 };
+pub use handlers::{DhtState, handle_query};
 pub use krpc::{
     COMPACT_NODE_V4_LEN, COMPACT_NODE_V6_LEN, COMPACT_PEER_V4_LEN, COMPACT_PEER_V6_LEN,
     CompactNode, CompactNode6, INFO_HASH_LEN, InfoHash, KrpcError, KrpcErrorPayload, KrpcKind,
