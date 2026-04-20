@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 gate #2 — three-engine DHT-only swarm download)
+
+Milestone hard-gate landed. Three magpie `Engine`s on loopback,
+each with its own `DhtRuntime` on its own `UdpDemux`:
+
+- A seeds a 512 KiB synthetic v1 torrent (32 × 16 KiB pieces) from
+  a pre-populated `MemoryStorage` with `initial_have = all-true`.
+- B and C start with empty storage, no pre-configured peers, no
+  trackers, no PEX.
+- All three seed each other's routing tables with the remaining
+  two DHT addresses (replaces the cache + DNS bootstrap path for
+  test hermeticity).
+- A's `attach_dht` announces for the info-hash on a 250 ms
+  interval; B and C's attach_dht loops pick up A via iterative
+  `get_peers`, feed the address into `add_peer`, and download via
+  the standard peer wire.
+- SHA-256 of both leechers' final storage must match the seeder's
+  content. Silent-failure guards assert `PeerConnected` fires on
+  both leechers (so a spurious pass via unused plumbing fails) and
+  that no `DhtAnnounceFailed` alert appeared (so a recovery mode
+  doesn't mask a real DHT path failure).
+
+Wall-clock: 6.40s, stable across 5 consecutive runs. Requires
+`--features dht,test-support`.
+
+`docs/MILESTONES.md`: M4 → **done**.
+
 ### Added (M4 workstream D-tail — persistent contact cache)
 
 ADR-0025's top-64 routing-table snapshot persisted to disk between
