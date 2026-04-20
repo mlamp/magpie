@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream B-tail — UdpDemux DHT dispatch)
+
+ADR-0015 reserved a first-byte-`b'd'` branch on `UdpDemux` for a
+future DHT subscriber; it's now wired.
+
+- `UdpPacket { data, from, received_at }` ships at the
+  `magpie_bt_core::session::udp` surface.
+- `UdpDemux::register_dht(mpsc::Sender<UdpPacket>)` — single-slot
+  registration via `OnceLock` (lock-free hot path). Returns
+  `DemuxError::DhtAlreadyRegistered` on second call.
+- Dispatch switches on `packet[0]`: `b'd'` → DHT subscriber with
+  `try_send` (never blocks the recv loop); everything else falls
+  through to the existing tracker-txid path.
+- Four new tests: DHT dispatch, no-subscriber drops, duplicate
+  registration, tracker-response fallthrough.
+
 ### Added (M4 workstream B — DHT transport pumps)
 
 Channel-driven transport plumbing for the DHT task. Deliberately
