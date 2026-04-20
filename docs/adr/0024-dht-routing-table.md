@@ -1,7 +1,7 @@
 # 0024 — DHT routing table (BEP 5)
 
-- **Status**: proposed
-- **Date**: 2026-04-20
+- **Status**: accepted
+- **Date**: 2026-04-20 (proposed) / 2026-04-21 (accepted at M4 close)
 - **Deciders**: magpie maintainers
 - **Consulted**: `_tmp/rakshasa-libtorrent/src/dht/`, BEP 5 §"Routing Table", ADR-0001 (subcrate for DHT)
 

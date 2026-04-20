@@ -1,6 +1,6 @@
 # M3 — Extension protocol + Magnet + PEX + LSD
 
-**Status**: in-progress
+**Status**: done (2026-04-21; red-team audit green after ADR-numbering + fuzz-matrix fixes)
 **Gate summary**: `magnet:?xt=...&tr=...` add works end-to-end (metadata fetched from peers, download completes, SHA-256 match); PEX discovers at least one additional peer in a controlled-swarm scenario; LSD announces are sent and received on loopback.
 
 ## Goal
@@ -12,7 +12,7 @@ Make magpie usable with magnet links — the dominant way users add torrents in 
 ### A. Extension protocol infrastructure (BEP 10)
 
 - [x] Parse the extension-handshake message (bencode `m` dict mapping extension names to IDs): `crates/magpie-bt-wire/src/extension.rs`. Handles `m`, `metadata_size`, `p`, `v`, `yourip`, `reqq`. Rejects ID 0 (BEP 10: disabled), non-UTF8 names, >128 extensions, metadata_size >16 MB.
-- [x] `ExtensionRegistry` — per-peer negotiated ID mapping: `crates/magpie-bt-wire/src/extension.rs`. `with_local()`, `set_remote()`, `remote_id()`, `local_id()`, `our_handshake()`.
+- [x] `ExtensionRegistry` — per-peer negotiated ID mapping: `crates/magpie-bt-wire/src/extension.rs`. `new(local)`, `set_remote()`, `remote_id()`, `local_id()`, `our_handshake()`, `local_name_for_id()`.
 - [x] Wire extension-handshake exchange into `PeerConn` post-handshake: `peer.rs::exchange_extension_handshake()`. Sends ours, waits (configurable timeout) for theirs, populates registry. Lenient: non-handshake first messages processed normally; timeouts don't kill the connection.
 - [x] Dispatch `Message::Extended` payloads to the appropriate handler by extension ID: `peer.rs::handle_inbound()`. Uses `ExtensionRegistry::local_name_for_id()` for reverse lookup. Forwards as `PeerToSession::ExtensionMessage`. Late handshakes (id=0) update the registry. Payload size capped at 1 MB.
 - [x] Fuzz target for extension-handshake parser + corpus: `crates/magpie-bt-wire/fuzz/fuzz_targets/extension_handshake.rs`, 4 seed corpus entries.
@@ -56,15 +56,16 @@ Make magpie usable with magnet links — the dominant way users add torrents in 
 3. **Magnet interop**: magpie-seed with `ut_metadata` → qBittorrent or Transmission leecher starts from the same magnet URI, downloads successfully. Best-effort for M3 (promoted to hard gate in M4 if it slips). Wired as new compose scenarios `qbittorrent-magnet` / `transmission-magnet` (`ci/interop/docker-compose.{client}-magnet.yml`) with companion gate scripts (`gate_{client}_magnet.sh`). Seeder runs with `--advertise-metadata` so its BEP 10 extension handshake exposes `metadata_size` and serves `ut_metadata` Data; `generate_fixture` writes `fixture.magnet` (`magnet:?xt=urn:btih:<hex>&dn=...&tr=...`) which the gate script feeds to the leecher's add-via-URL endpoint. Run via `ci/interop/run.sh qbittorrent-magnet` / `transmission-magnet`.
 4. **PEX discovery**: controlled-swarm test with 3 magpie engines — A seeds, B leeches from A (via direct `add_peer`), C leeches from A (via direct `add_peer`). B and C discover each other via PEX without being directly connected. Verify C receives at least one piece from B after PEX discovery.
 5. **LSD announce + receive**: unit/integration test — two engines on loopback, one announces via LSD, the other receives and adds the peer. Private torrents must NOT announce.
-6. **Extension handshake fuzz**: fuzz target for extension-handshake parser, corpus committed, nightly CI ≥10 min.
+6. **Extension handshake fuzz**: fuzz target for extension-handshake parser, corpus committed, nightly CI ≥10 min. Wired into `.github/workflows/nightly.yml` as `magpie-bt-wire::extension_handshake` at 600 s.
 7. **BDD coverage**: `.feature` files for BEP 9, 10, 11, 14 under `crates/magpie-bt/tests/features/`; `bep-coverage.md` rows updated.
 8. **ADRs landed** for any non-trivial design decisions (extension registry shape, metadata exchange flow, PEX rate limiting).
 
-## ADRs expected
+## ADRs landed
 
-- **ADR-0021** Extension registry: per-peer negotiated ID map shape, dispatch mechanism, how new extensions register.
-- **ADR-0022** Metadata exchange flow: piece-size, retry policy, max-concurrent-requests, hash verification ordering, transition from "metadata-fetching" to "downloading" state.
-- Others as needed during implementation.
+- **ADR-0027** Extension registry + dispatch (BEP 10): per-peer negotiated ID map shape, lenient dispatch, payload bounds.
+- **ADR-0028** Metadata exchange flow (BEP 9): 16 MiB / 2 Mi-piece bounds, 3-restart retry ceiling, hash-verify-before-parse ordering, state transition.
+
+(Numbering: M2 absorbed 0021 for multi-file storage and 0022 for resume state. M3's design decisions land at 0027 + 0028.)
 
 ## Open questions
 

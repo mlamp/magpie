@@ -66,9 +66,11 @@ Short notes on options we did not pick, and why.
 | [0017](0017-upload-request-flow.md) | Upload request flow: per-peer unread/ready queues + send-buffer watermark | accepted |
 | [0018](0018-read-cache.md) | Read cache: session-global piece-granular LRU with store-buffer short-circuit | accepted |
 | [0019](0019-completion-transition.md) | Leech→seed completion transition: five-step forward-only sequence | accepted |
-| [0021](0021-multi-file-storage.md) | Multi-file storage: `MultiFileStorage` impl of the existing `Storage` trait, sorted entries + bounded LRU fd pool | proposed |
-| [0022](0022-resume-state.md) | Resume-state persistence: `ResumeSink` + `FileResumeSink` bencode sidecar | proposed |
+| [0021](0021-multi-file-storage.md) | Multi-file storage: `MultiFileStorage` impl of the existing `Storage` trait, sorted entries + bounded LRU fd pool | accepted |
+| [0022](0022-resume-state.md) | Resume-state persistence: `ResumeSink` + `FileResumeSink` bencode sidecar | accepted |
 | [0023](0023-super-seeding.md) | Super-seeding (BEP 16): `SuperSeedChoker` + per-peer `RevealState` | proposed (design only) |
-| [0024](0024-dht-routing-table.md) | DHT routing table: split-on-demand binary tree, K=8, quality state machine | proposed |
-| [0025](0025-dht-bootstrap.md) | DHT bootstrap: three-source contact list + persistent cache | proposed |
-| [0026](0026-dht-tokens-and-rate-limits.md) | DHT tokens (stateless HMAC), BEP 42 node ID, token-bucket rate limits | proposed |
+| [0024](0024-dht-routing-table.md) | DHT routing table: split-on-demand binary tree, K=8, quality state machine | accepted |
+| [0025](0025-dht-bootstrap.md) | DHT bootstrap: three-source contact list + persistent cache | accepted |
+| [0026](0026-dht-tokens-and-rate-limits.md) | DHT tokens (stateless HMAC), BEP 42 node ID, token-bucket rate limits | accepted |
+| [0027](0027-extension-registry.md) | BEP 10 extension registry: per-peer ID mapping + lenient dispatch | accepted |
+| [0028](0028-metadata-exchange-flow.md) | BEP 9 metadata exchange: assembler bounds, retry ceiling, hash-verify-then-parse | accepted |

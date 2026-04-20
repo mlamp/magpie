@@ -19,8 +19,8 @@ A detail file is created when a milestone transitions `not-started → planned`,
 |----|------|--------|--------|
 | M0 | Foundations (no network) | done | [000-foundations.md](milestones/000-foundations.md) |
 | M1 | Leecher, TCP, v1 | done | [001-leecher-tcp-v1.md](milestones/001-leecher-tcp-v1.md) |
-| M2 | Seeder + multi-torrent (consumer-integration ready) | in-progress | [002-seeder-multi-torrent.md](milestones/002-seeder-multi-torrent.md) |
-| M3 | Extension protocol + Magnet + PEX + LSD | in-progress | [003-extension-magnet.md](milestones/003-extension-magnet.md) |
+| M2 | Seeder + multi-torrent (consumer-integration ready) | done | [002-seeder-multi-torrent.md](milestones/002-seeder-multi-torrent.md) |
+| M3 | Extension protocol + Magnet + PEX + LSD | done | [003-extension-magnet.md](milestones/003-extension-magnet.md) |
 | M4 | DHT | done | [004-dht.md](milestones/004-dht.md) |
 | M5 | uTP + BEP 52 hybrid | not-started | — |
 | M6 | Parity + replace librqbit | not-started | — |

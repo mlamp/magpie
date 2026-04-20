@@ -1,7 +1,7 @@
 # 0026 — DHT tokens, BEP 42 node ID, and rate limiting
 
-- **Status**: proposed
-- **Date**: 2026-04-20
+- **Status**: accepted
+- **Date**: 2026-04-20 (proposed) / 2026-04-21 (accepted at M4 close)
 - **Deciders**: magpie maintainers
 - **Consulted**: `_tmp/rakshasa-libtorrent/src/dht/dht_router.cc:436-514`, BEP 5 §"announce_peer", BEP 42, ADR-0024 (routing table), ADR-0025 (bootstrap)
 

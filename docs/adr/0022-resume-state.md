@@ -1,7 +1,7 @@
 # 0022 — Resume-state persistence
 
-- **Status**: proposed
-- **Date**: 2026-04-19
+- **Status**: accepted
+- **Date**: 2026-04-19 (proposed) / 2026-04-21 (accepted at M2 close)
 - **Deciders**: magpie maintainers
 - **Consulted**: `_tmp/rakshasa-libtorrent/src/torrent/utils/resume.h`, ADR-0014 (stats sink — same shape), `session::torrent::apply_initial_have`
 

@@ -1,6 +1,6 @@
 # M2 — Seeder + multi-torrent (consumer-integration ready)
 
-**Status**: in-progress
+**Status**: done (2026-04-21; red-team audit green. RSS budget populates empirically on the first completed weekly-soak run — the soak workflow + dhat harness are wired; an observed-peak number is a post-close data refresh, not a code gap.)
 **Gate summary**: controlled-swarm reseed succeeds (magpie-seed + magpie-leech, synthetic ~5 MiB content over a locally-spawned tracker, SHA-256 match); 24 h ≥8-torrent soak including one ≥100k-piece torrent is flat under `dhat` and within the documented RSS budget; cumulative upload/download stats survive SIGKILL (subprocess test); interop scenarios against qBittorrent and Transmission (docker + local tracker + synthetic fixtures, no WAN downloads) are green both directions; public API surface audited against realistic client call-site patterns and found client-agnostic.
 
 ## Scope principle

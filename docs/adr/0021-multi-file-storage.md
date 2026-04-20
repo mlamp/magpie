@@ -1,7 +1,7 @@
 # 0021 — Multi-file storage layout
 
-- **Status**: proposed
-- **Date**: 2026-04-18
+- **Status**: accepted
+- **Date**: 2026-04-18 (proposed) / 2026-04-21 (accepted at M2 close)
 - **Deciders**: magpie maintainers
 - **Consulted**: `_tmp/rakshasa-libtorrent/` (rtorrent's library), ADR-0004 (storage trait shape)
 

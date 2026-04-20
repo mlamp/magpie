@@ -27,6 +27,8 @@ jobs:
             target: handshake_decode
           - crate: magpie-bt-wire
             target: wire_decode
+          - crate: magpie-bt-wire
+            target: extension_handshake
           - crate: magpie-bt-core
             target: alert_ring
           - crate: magpie-bt-core

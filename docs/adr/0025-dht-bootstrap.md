@@ -1,7 +1,7 @@
 # 0025 — DHT bootstrap strategy (BEP 5)
 
-- **Status**: proposed
-- **Date**: 2026-04-20
+- **Status**: accepted
+- **Date**: 2026-04-20 (proposed) / 2026-04-21 (accepted at M4 close)
 - **Deciders**: magpie maintainers
 - **Consulted**: `_tmp/rakshasa-libtorrent/src/dht/dht_router.cc:602-663`, BEP 5 §"Bootstrap", ADR-0024 (routing table)
 
