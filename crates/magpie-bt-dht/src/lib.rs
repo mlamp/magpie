@@ -41,6 +41,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod bootstrap;
 mod bucket;
 mod handlers;
 mod krpc;
@@ -53,6 +54,11 @@ mod runtime;
 mod tokens;
 mod transport;
 
+pub use bootstrap::{
+    BootstrapConfig, BootstrapOutcome, DEFAULT_CONTACT_QUERY_TIMEOUT, DEFAULT_EXIT_GOOD_NODES,
+    DEFAULT_PING_BATCH, DEFAULT_ROUND_INTERVAL, DEFAULT_STALL_AFTER, DEFAULT_STALL_THRESHOLD,
+    DEFAULT_STALLED_INTERVAL, run_bootstrap,
+};
 pub use bucket::{
     BAD_REMOVE_AFTER, Bucket, K, MAX_CONSECUTIVE_FAILURES, Node, NodeQuality, QUESTIONABLE_AFTER,
 };

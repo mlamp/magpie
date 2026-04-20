@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream D — bootstrap controller)
+
+- `run_bootstrap(runtime, config)` async function drives the
+  three-source contact list (consumer-supplied
+  `BootstrapConfig::seed_contacts`; cache + DNS resolution is a
+  consumer concern) through 60-s (tunable) `find_node(local_id)`
+  rounds until either the exit criterion holds
+  (`good_node_count ≥ 32` AND at least one non-empty nodes reply
+  seen) or the 10-min stall threshold passes.
+- `BootstrapOutcome::{Operational, Stalled, Cancelled}` conveys
+  termination mode.
+- Replies have self-references (sender id == local_id) filtered
+  before ingest — a Kademlia quirk where hosts insert the querier
+  into their own table and then echo it back.
+- 3 new unit tests (round-picker + constants lock ADR-0025) and 3
+  integration tests in `tests/bootstrap_cold_start.rs`: the
+  broker-based probe, the cold-start Operational scenario, and
+  the stall-to-returns no-seed regression.
+
+Crate-total: 124 unit tests + 5 integration tests + 1 doc-test.
+
 ### Added (M4 — iterative lookup + announce + private-flag regression)
 
 - `iterative_get_peers(runtime, info_hash)` — α = 3 parallel
