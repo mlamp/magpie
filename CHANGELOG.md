@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream E/2 — three-tier token-bucket rate limits)
+
+ADR-0026's per-IP + global inbound + per-remote outbound caps.
+
+- `RateLimiter::check_inbound(ip, now)` refills both the per-IP
+  and global buckets, then atomically two-bucket-consumes: only
+  decrements if both have slots, so a rate-limited request never
+  burns the global budget for a drop (regression test locked).
+- `RateLimiter::check_outbound(ip, now)` for the per-remote
+  outbound tier.
+- Over-cap requests are **silently dropped** + counter-incremented;
+  no reply (would amplify reflection attacks).
+- `sweep_idle(now, max_idle)` drops per-IP / per-remote buckets
+  quiet longer than `max_idle`. Default window 5 min.
+- Defaults match ADR-0026: 20/60 per-IP inbound, 500/1500 global,
+  10/30 per-remote outbound.
+- 8 new tests covering the gate-6 scenarios (200 qps single source
+  admits 60; 2000 qps across 200 IPs admits 1500), refill over
+  time, sweep eviction, and the atomic-consume regression.
+
+Crate-total: 97 unit tests + 1 doc-test.
+
 ### Added (M4 workstream E — tokens + BEP 42 two-phase id)
 
 Stateless token factory + local-id manager per ADR-0026.

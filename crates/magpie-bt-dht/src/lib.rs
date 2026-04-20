@@ -44,6 +44,7 @@
 mod bucket;
 mod krpc;
 mod node_id;
+mod rate_limit;
 mod routing_table;
 mod tokens;
 mod transport;
@@ -58,6 +59,11 @@ pub use krpc::{
     MAX_TRANSACTION_ID_LEN, MAX_VALUES_PEERS, Query, Response,
 };
 pub use node_id::{Distance, LocalNodeId, NodeId, generate_node_id, validate_bep42};
+pub use rate_limit::{
+    DEFAULT_BUCKET_IDLE, DEFAULT_INBOUND_GLOBAL_BURST, DEFAULT_INBOUND_GLOBAL_QPS,
+    DEFAULT_INBOUND_PER_IP_BURST, DEFAULT_INBOUND_PER_IP_QPS, DEFAULT_OUTBOUND_PER_NODE_BURST,
+    DEFAULT_OUTBOUND_PER_NODE_QPS, RateLimitConfig, RateLimiter,
+};
 pub use routing_table::{BUCKET_REFRESH_AFTER, Insertion, RoutingTable};
 pub use tokens::{TOKEN_LENGTH, TOKEN_ROTATION_INTERVAL, TokenSecrets};
 pub use transport::{
