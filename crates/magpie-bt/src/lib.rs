@@ -31,8 +31,13 @@
 
 pub use magpie_bt_bencode as bencode;
 pub use magpie_bt_core::{alerts, engine, peer_filter, peer_id, picker, session, storage, tracker};
+#[cfg(feature = "dht")]
+pub use magpie_bt_dht as dht;
 pub use magpie_bt_metainfo as metainfo;
 pub use magpie_bt_wire as wire;
+
+#[cfg(feature = "dht")]
+pub use magpie_bt_core::dht::AttachDhtConfig;
 
 // Convenience re-exports of the most common types at the crate root.
 pub use magpie_bt_core::alerts::{Alert, AlertCategory, AlertQueue};

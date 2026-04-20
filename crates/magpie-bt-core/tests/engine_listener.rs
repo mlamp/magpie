@@ -73,7 +73,10 @@ async fn seeder_initiate(
             max_in_flight: 0,
             max_payload: 256 * 1024,
             handshake_timeout: Duration::from_secs(5),
-            extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+            extension_handshake_timeout: Duration::from_secs(5),
+            remote_addr: None,
+            metadata_size: None,
+            local_listen_port: None,
         };
         let _ = perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
             .await
@@ -213,7 +216,10 @@ async fn listener_drops_unknown_info_hash_silently() {
         max_in_flight: 0,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_millis(500),
-        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+        extension_handshake_timeout: Duration::from_secs(5),
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
     let result = perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator).await;
     // Engine must have silently dropped the connection, so we read EOF when
@@ -279,7 +285,10 @@ async fn listener_silent_drops_peer_id_collision() {
             max_in_flight: 0,
             max_payload: 256 * 1024,
             handshake_timeout: Duration::from_secs(5),
-            extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+            extension_handshake_timeout: Duration::from_secs(5),
+            remote_addr: None,
+            metadata_size: None,
+            local_listen_port: None,
         };
         perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
             .await
@@ -316,7 +325,10 @@ async fn listener_silent_drops_peer_id_collision() {
         max_in_flight: 0,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_millis(500),
-        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+        extension_handshake_timeout: Duration::from_secs(5),
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
     let result = perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator).await;
     assert!(
@@ -478,7 +490,10 @@ async fn inbound_silent_drops_when_cap_exceeded() {
             max_in_flight: 0,
             max_payload: 256 * 1024,
             handshake_timeout: Duration::from_secs(5),
-            extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+            extension_handshake_timeout: Duration::from_secs(5),
+            remote_addr: None,
+            metadata_size: None,
+            local_listen_port: None,
         };
         perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
             .await
@@ -514,7 +529,10 @@ async fn inbound_silent_drops_when_cap_exceeded() {
         max_in_flight: 0,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_millis(500),
-        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+        extension_handshake_timeout: Duration::from_secs(5),
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
     let result = perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator).await;
     assert!(
@@ -542,7 +560,10 @@ async fn spawn_quiet_seeder(info_hash: [u8; 20], peer_id: [u8; 20]) -> std::net:
                 max_in_flight: 0,
                 max_payload: 256 * 1024,
                 handshake_timeout: Duration::from_secs(5),
-                extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+                extension_handshake_timeout: Duration::from_secs(5),
+                remote_addr: None,
+                metadata_size: None,
+                local_listen_port: None,
             };
             let _ = perform_handshake(&mut stream, &cfg, HandshakeRole::Responder).await;
             // Hold forever — test does not depend on close.

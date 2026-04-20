@@ -142,9 +142,7 @@ fn validate_path_components(components: &[String]) -> Result<PathBuf, String> {
             return Err(format!("component {i} is {comp:?} (reserved)"));
         }
         if comp.contains('/') || comp.contains('\\') {
-            return Err(format!(
-                "component {i} {comp:?} contains a path separator"
-            ));
+            return Err(format!("component {i} {comp:?} contains a path separator"));
         }
         if comp.contains('\0') {
             return Err(format!("component {i} contains an interior NUL byte"));
@@ -570,19 +568,13 @@ fn check_path_stays_under_root(root: &Path, full: &Path) -> Result<(), String> {
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 // Missing intermediate dir or leaf — walk up.
                 if !anchor.pop() {
-                    return Err(format!(
-                        "cannot resolve any ancestor of {}",
-                        full.display()
-                    ));
+                    return Err(format!("cannot resolve any ancestor of {}", full.display()));
                 }
             }
             Err(e) => {
                 // Permission-denied, interrupted, or any other error:
                 // refuse to guess — fail closed.
-                return Err(format!(
-                    "cannot canonicalise {}: {e}",
-                    anchor.display()
-                ));
+                return Err(format!("cannot canonicalise {}: {e}", anchor.display()));
             }
         }
     }
@@ -709,8 +701,7 @@ fn specs_from_info(info: &magpie_bt_metainfo::Info<'_>) -> Result<Vec<FileSpec>,
         magpie_bt_metainfo::FileListV1::Multi { files } => files,
         magpie_bt_metainfo::FileListV1::Single { .. } => {
             return Err(StorageError::new(StorageErrorKind::Path(
-                "this is a single-file torrent; use FileStorage instead of MultiFileStorage"
-                    .into(),
+                "this is a single-file torrent; use FileStorage instead of MultiFileStorage".into(),
             )));
         }
     };
@@ -830,11 +821,8 @@ mod tests {
 
     #[test]
     fn duplicate_path_rejected() {
-        let err = validate_specs(&[
-            spec(&["a", "file.bin"], 1),
-            spec(&["a", "file.bin"], 1),
-        ])
-        .unwrap_err();
+        let err = validate_specs(&[spec(&["a", "file.bin"], 1), spec(&["a", "file.bin"], 1)])
+            .unwrap_err();
         assert!(path_err(err).contains("duplicates"));
     }
 
@@ -862,12 +850,8 @@ mod tests {
 
     #[test]
     fn happy_path_with_zero_length() {
-        let (entries, cap) = validate_specs(&[
-            spec(&["a"], 10),
-            spec(&["b"], 0),
-            spec(&["c"], 20),
-        ])
-        .unwrap();
+        let (entries, cap) =
+            validate_specs(&[spec(&["a"], 10), spec(&["b"], 0), spec(&["c"], 20)]).unwrap();
         assert_eq!(cap, 30);
         assert_eq!(entries[0].torrent_offset, 0);
         assert_eq!(entries[1].torrent_offset, 10);
@@ -897,7 +881,10 @@ mod tests {
         let path = dir.path().join("f");
         std::fs::write(&path, b"hello").unwrap();
         let pool = FdPool::with_cap(4);
-        let key = FdKey { storage_id: 1, entry_idx: 0 };
+        let key = FdKey {
+            storage_id: 1,
+            entry_idx: 0,
+        };
         let a = pool.get_or_open(key, &path).unwrap();
         let b = pool.get_or_open(key, &path).unwrap();
         assert!(Arc::ptr_eq(&a, &b));
@@ -912,20 +899,33 @@ mod tests {
         }
         let pool = FdPool::with_cap(4);
         for i in 0..4u32 {
-            let key = FdKey { storage_id: 1, entry_idx: i };
-            pool.get_or_open(key, &dir.path().join(format!("f{i}"))).unwrap();
+            let key = FdKey {
+                storage_id: 1,
+                entry_idx: i,
+            };
+            pool.get_or_open(key, &dir.path().join(format!("f{i}")))
+                .unwrap();
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         assert_eq!(pool.opens_total(), 4);
         // Touch f0 so f1 becomes LRU.
-        let key0 = FdKey { storage_id: 1, entry_idx: 0 };
+        let key0 = FdKey {
+            storage_id: 1,
+            entry_idx: 0,
+        };
         pool.get_or_open(key0, &dir.path().join("f0")).unwrap();
         // Open f4 — forces eviction of f1.
-        let key4 = FdKey { storage_id: 1, entry_idx: 4 };
+        let key4 = FdKey {
+            storage_id: 1,
+            entry_idx: 4,
+        };
         pool.get_or_open(key4, &dir.path().join("f4")).unwrap();
         assert_eq!(pool.opens_total(), 5);
         // f1 was evicted: re-open increments counter.
-        let key1 = FdKey { storage_id: 1, entry_idx: 1 };
+        let key1 = FdKey {
+            storage_id: 1,
+            entry_idx: 1,
+        };
         pool.get_or_open(key1, &dir.path().join("f1")).unwrap();
         assert_eq!(pool.opens_total(), 6);
         // f0 still cached: hit does not increment.
@@ -941,8 +941,22 @@ mod tests {
         std::fs::write(&p0, b"x").unwrap();
         std::fs::write(&p1, b"y").unwrap();
         let pool = FdPool::with_cap(4);
-        pool.get_or_open(FdKey { storage_id: 1, entry_idx: 0 }, &p0).unwrap();
-        pool.get_or_open(FdKey { storage_id: 2, entry_idx: 0 }, &p1).unwrap();
+        pool.get_or_open(
+            FdKey {
+                storage_id: 1,
+                entry_idx: 0,
+            },
+            &p0,
+        )
+        .unwrap();
+        pool.get_or_open(
+            FdKey {
+                storage_id: 2,
+                entry_idx: 0,
+            },
+            &p1,
+        )
+        .unwrap();
         assert_eq!(pool.opens_total(), 2);
     }
 
@@ -954,11 +968,20 @@ mod tests {
         }
         let pool = FdPool::with_cap(4);
         let held = pool
-            .get_or_open(FdKey { storage_id: 1, entry_idx: 0 }, &dir.path().join("f0"))
+            .get_or_open(
+                FdKey {
+                    storage_id: 1,
+                    entry_idx: 0,
+                },
+                &dir.path().join("f0"),
+            )
             .unwrap();
         for i in 1..5u32 {
             pool.get_or_open(
-                FdKey { storage_id: 1, entry_idx: i },
+                FdKey {
+                    storage_id: 1,
+                    entry_idx: i,
+                },
                 &dir.path().join(format!("f{i}")),
             )
             .unwrap();
@@ -978,16 +1001,14 @@ mod tests {
     #[test]
     fn create_makes_files_with_declared_sizes() {
         let dir = tempfile::tempdir().unwrap();
-        let specs = vec![
-            spec(&["a"], 100),
-            spec(&["sub", "b"], 50),
-            spec(&["c"], 0),
-        ];
+        let specs = vec![spec(&["a"], 100), spec(&["sub", "b"], 50), spec(&["c"], 0)];
         let s = build_storage(dir.path(), &specs);
         assert_eq!(s.capacity(), 150);
         assert_eq!(std::fs::metadata(dir.path().join("a")).unwrap().len(), 100);
         assert_eq!(
-            std::fs::metadata(dir.path().join("sub").join("b")).unwrap().len(),
+            std::fs::metadata(dir.path().join("sub").join("b"))
+                .unwrap()
+                .len(),
             50
         );
         assert_eq!(std::fs::metadata(dir.path().join("c")).unwrap().len(), 0);
@@ -1053,10 +1074,7 @@ mod tests {
         let s = build_storage(dir.path(), &[spec(&["a"], 10)]);
         let mut buf = [0u8; 10];
         let err = s.read_block(5, &mut buf).unwrap_err();
-        assert!(matches!(
-            err.kind,
-            StorageErrorKind::OutOfBounds { .. }
-        ));
+        assert!(matches!(err.kind, StorageErrorKind::OutOfBounds { .. }));
     }
 
     #[test]
@@ -1065,7 +1083,11 @@ mod tests {
         let root = dir.path();
         let s = build_storage(
             root,
-            &[spec(&["d1", "a"], 10), spec(&["d1", "b"], 10), spec(&["d2", "c"], 10)],
+            &[
+                spec(&["d1", "a"], 10),
+                spec(&["d1", "b"], 10),
+                spec(&["d2", "c"], 10),
+            ],
         );
         assert!(root.join("d1").is_dir());
         assert!(root.join("d2").is_dir());
@@ -1080,8 +1102,7 @@ mod tests {
     fn open_rejects_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         let pool = Arc::new(FdPool::with_cap(4));
-        let err =
-            MultiFileStorage::open(dir.path(), &[spec(&["absent"], 1)], pool).unwrap_err();
+        let err = MultiFileStorage::open(dir.path(), &[spec(&["absent"], 1)], pool).unwrap_err();
         assert!(matches!(err.kind, StorageErrorKind::Path(_)));
     }
 
@@ -1090,8 +1111,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("f"), b"short").unwrap();
         let pool = Arc::new(FdPool::with_cap(4));
-        let err =
-            MultiFileStorage::open(dir.path(), &[spec(&["f"], 100)], pool).unwrap_err();
+        let err = MultiFileStorage::open(dir.path(), &[spec(&["f"], 100)], pool).unwrap_err();
         let msg = path_err(err);
         assert!(msg.contains("has len"), "msg={msg}");
     }
@@ -1109,7 +1129,11 @@ mod tests {
     #[test]
     fn component_too_long_rejected() {
         let long = "a".repeat(MAX_PATH_COMPONENT_LEN + 1);
-        let err = validate_specs(&[FileSpec { path: vec![long], length: 1 }]).unwrap_err();
+        let err = validate_specs(&[FileSpec {
+            path: vec![long],
+            length: 1,
+        }])
+        .unwrap_err();
         let msg = path_err(err);
         assert!(msg.contains("bytes"), "msg={msg}");
     }
@@ -1118,8 +1142,11 @@ mod tests {
     fn component_at_limit_accepted() {
         // Exactly MAX_PATH_COMPONENT_LEN must be accepted (boundary).
         let at_limit = "a".repeat(MAX_PATH_COMPONENT_LEN);
-        let (entries, _) = validate_specs(&[FileSpec { path: vec![at_limit], length: 1 }])
-            .expect("exactly MAX_PATH_COMPONENT_LEN must be accepted");
+        let (entries, _) = validate_specs(&[FileSpec {
+            path: vec![at_limit],
+            length: 1,
+        }])
+        .expect("exactly MAX_PATH_COMPONENT_LEN must be accepted");
         assert_eq!(entries.len(), 1);
     }
 
@@ -1131,17 +1158,9 @@ mod tests {
         let leaf = dir.path().join("evil");
         std::os::unix::fs::symlink("/nonexistent/target", &leaf).unwrap();
         let pool = Arc::new(FdPool::with_cap(4));
-        let err = MultiFileStorage::create(
-            dir.path(),
-            &[spec(&["evil"], 10)],
-            pool,
-        )
-        .unwrap_err();
+        let err = MultiFileStorage::create(dir.path(), &[spec(&["evil"], 10)], pool).unwrap_err();
         let msg = path_err(err);
-        assert!(
-            msg.contains("symlink"),
-            "msg={msg}"
-        );
+        assert!(msg.contains("symlink"), "msg={msg}");
     }
 
     #[test]
@@ -1152,12 +1171,8 @@ mod tests {
         let link_path = dir.path().join("escape");
         std::os::unix::fs::symlink(outside.path(), &link_path).unwrap();
         let pool = Arc::new(FdPool::with_cap(4));
-        let err = MultiFileStorage::create(
-            dir.path(),
-            &[spec(&["escape", "hosed"], 1)],
-            pool,
-        )
-        .unwrap_err();
+        let err = MultiFileStorage::create(dir.path(), &[spec(&["escape", "hosed"], 1)], pool)
+            .unwrap_err();
         let msg = path_err(err);
         assert!(
             msg.contains("outside") || msg.contains("resolves"),
@@ -1168,7 +1183,10 @@ mod tests {
     #[test]
     fn capacity_matches_sum_of_lengths() {
         let dir = tempfile::tempdir().unwrap();
-        let s = build_storage(dir.path(), &[spec(&["a"], 3), spec(&["b"], 5), spec(&["c"], 7)]);
+        let s = build_storage(
+            dir.path(),
+            &[spec(&["a"], 3), spec(&["b"], 5), spec(&["c"], 7)],
+        );
         assert_eq!(s.capacity(), 15);
     }
 
@@ -1229,8 +1247,7 @@ mod tests {
             v2: None,
         };
         let pool = Arc::new(FdPool::with_cap(4));
-        let err =
-            MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
+        let err = MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
         let msg = path_err(err);
         assert!(msg.contains("single-file"), "msg={msg}");
     }
@@ -1252,10 +1269,12 @@ mod tests {
             }),
         };
         let pool = Arc::new(FdPool::with_cap(4));
-        let err =
-            MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
+        let err = MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
         let msg = path_err(err);
-        assert!(msg.contains("v2-only") || msg.contains("v1 info dict"), "msg={msg}");
+        assert!(
+            msg.contains("v2-only") || msg.contains("v1 info dict"),
+            "msg={msg}"
+        );
     }
 
     #[test]
@@ -1299,8 +1318,7 @@ mod tests {
         }];
         let info = info_v1_multi(&files);
         let pool = Arc::new(FdPool::with_cap(4));
-        let err =
-            MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
+        let err = MultiFileStorage::create_from_info(dir.path(), &info, pool).unwrap_err();
         let msg = path_err(err);
         assert!(msg.contains("UTF-8"), "msg={msg}");
     }
@@ -1309,15 +1327,21 @@ mod tests {
     fn open_from_info_resumes_existing() {
         let dir = tempfile::tempdir().unwrap();
         let files = [
-            magpie_bt_metainfo::FileV1 { length: 10, path: vec![b"a"] },
-            magpie_bt_metainfo::FileV1 { length: 10, path: vec![b"b"] },
+            magpie_bt_metainfo::FileV1 {
+                length: 10,
+                path: vec![b"a"],
+            },
+            magpie_bt_metainfo::FileV1 {
+                length: 10,
+                path: vec![b"b"],
+            },
         ];
         let info = info_v1_multi(&files);
         let pool = Arc::new(FdPool::with_cap(4));
         // Create first to lay the files down.
-        let s1 = MultiFileStorage::create_from_info(dir.path(), &info, Arc::clone(&pool))
+        let s1 = MultiFileStorage::create_from_info(dir.path(), &info, Arc::clone(&pool)).unwrap();
+        s1.write_block(0, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
             .unwrap();
-        s1.write_block(0, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).unwrap();
         drop(s1);
         // Re-open and verify content survives.
         let s2 = MultiFileStorage::open_from_info(dir.path(), &info, pool).unwrap();

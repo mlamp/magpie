@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream G — engine attach + UdpDemux adapter)
+
+Feature-gated DHT glue under the new `dht` feature (magpie-bt-core
+and magpie-bt both). Off by default per ADR-0001; consumers who
+don't enable it pay zero build cost.
+
+- `spawn_dht_on_demux(demux, config, now) -> DhtOnDemux` — wires a
+  `DhtRuntime` onto an already-running `UdpDemux`. Registers the
+  first-byte-`b'd'` subscriber, pumps `UdpPacket → Datagram`, and
+  drains the runtime's outbound channel back to `demux.send_to`.
+  `SpawnDhtError::{AlreadyRegistered, Rng}` on failure.
+- `Engine::attach_dht(torrent_id, dht, cfg)` — mirrors the tracker-
+  attach shape: periodic `DhtRuntime::announce` loop, fan-out
+  `add_peer` on returned peers, `Alert::Error {
+  DhtAnnounceFailed }` on round failure.
+- `AttachDhtConfig { listen_port, private, announce_interval,
+  error_backoff }`. When `private = true` every round is a no-op
+  (BEP 27) — the DHT's runtime-level private flag is the load-bearing
+  check.
+- `AlertErrorCode::DhtAnnounceFailed` variant (unconditional).
+- New integration test `tests/dht_attach.rs` (gated) exercises the
+  full stack over real UDP sockets: DHT runtime on one demux sends
+  a `Ping` query that lands on a second plain socket as a KRPC
+  bencode-dict datagram.
+
+Default-feature builds unchanged. `cargo check --features dht`,
+`cargo test --features dht`, and `cargo doc --features dht` all
+clean.
+
 ### Added (M4 workstream D — bootstrap controller)
 
 - `run_bootstrap(runtime, config)` async function drives the

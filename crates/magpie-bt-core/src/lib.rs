@@ -10,6 +10,8 @@
 #![doc = include_str!("../README.md")]
 
 pub mod alerts;
+#[cfg(feature = "dht")]
+pub mod dht;
 pub mod engine;
 pub mod ids;
 pub mod lsd;

@@ -155,13 +155,10 @@ impl LsdAnnounce {
                     }
                     "infohash" => {
                         if info_hashes.len() >= MAX_INFOHASHES_PER_MESSAGE {
-                            return Err(LsdError::InvalidFormat(
-                                "too many info hashes".into(),
-                            ));
+                            return Err(LsdError::InvalidFormat("too many info hashes".into()));
                         }
-                        let hash = hex_decode(value).map_err(|()| {
-                            LsdError::InvalidInfoHash(value.to_owned())
-                        })?;
+                        let hash = hex_decode(value)
+                            .map_err(|()| LsdError::InvalidInfoHash(value.to_owned()))?;
                         info_hashes.push(hash);
                     }
                     "cookie" => {
@@ -388,8 +385,14 @@ impl LsdService {
         let mut recv_buf = vec![0u8; MAX_MSG_SIZE];
         let dest = self.config.multicast_addr;
 
-        self.run_loop(&socket, &mut registered, &mut announce_tick, &mut recv_buf, dest)
-            .await;
+        self.run_loop(
+            &socket,
+            &mut registered,
+            &mut announce_tick,
+            &mut recv_buf,
+            dest,
+        )
+        .await;
 
         // Leave the multicast group on shutdown.
         let _ = socket.leave_multicast_v4(*multicast_addr.ip(), Ipv4Addr::UNSPECIFIED);
@@ -813,7 +816,9 @@ mod tests {
         service.register(sample_hash_2(), false);
 
         // Destructure to get access to the channel internals.
-        let LsdService { cmd_tx, mut cmd_rx, .. } = service;
+        let LsdService {
+            cmd_tx, mut cmd_rx, ..
+        } = service;
         drop(cmd_tx);
 
         let mut count = 0;

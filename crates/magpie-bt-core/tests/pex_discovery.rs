@@ -87,7 +87,12 @@ async fn spawn_engine_with_torrent(
         storage.write_block(0, content).expect("seed storage write");
     }
 
-    let mut req = AddTorrentRequest::new(info_hash, build_params(pieces), Arc::clone(&storage), peer_id);
+    let mut req = AddTorrentRequest::new(
+        info_hash,
+        build_params(pieces),
+        Arc::clone(&storage),
+        peer_id,
+    );
     req.peer_filter = Arc::new(DefaultPeerFilter::permissive_for_tests());
     if pre_seeded_storage.is_some() {
         req.initial_have = vec![true; PIECE_COUNT as usize];
@@ -173,14 +178,8 @@ async fn three_engines_pex_discover_each_other_and_transfer_piece() {
     // are. The seed's torrent-id was returned from spawn_engine_with_torrent;
     // we don't reuse it here because peer registration happens implicitly via
     // the inbound listener on A.
-    engine_b
-        .add_peer(id_b, addr_a)
-        .await
-        .expect("B add_peer A");
-    engine_c
-        .add_peer(id_c, addr_a)
-        .await
-        .expect("C add_peer A");
+    engine_b.add_peer(id_b, addr_a).await.expect("B add_peer A");
+    engine_c.add_peer(id_c, addr_a).await.expect("C add_peer A");
 
     // -- 4. Wait for PEX rounds on A to fire and tell B about C / C about B. -
     // First PEX tick on A waits one full pex_interval after start (interval

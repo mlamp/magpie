@@ -80,11 +80,7 @@ fn main() {
     // third-party leecher rather than a .torrent file. The seeder still
     // loads the `.torrent` for the seed-side path; only the leecher
     // bootstraps from the magnet URI.
-    let info_hash_hex: String = synth
-        .info_hash
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let info_hash_hex: String = synth.info_hash.iter().map(|b| format!("{b:02x}")).collect();
     let magnet_uri = format!(
         "magnet:?xt=urn:btih:{info_hash_hex}&dn={dn}&tr={tr}",
         dn = url_encode(&name),

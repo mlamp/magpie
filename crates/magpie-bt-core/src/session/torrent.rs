@@ -593,7 +593,10 @@ impl TorrentSession {
                 // Note: the initial Bitfield advert is sent by
                 // `register_peer_with` to dodge a Connected-before-Register
                 // race. HaveAll/HaveNone fast-ext optimization is a follow-up.
-                self.alerts.push(Alert::PeerConnected { torrent: self.torrent_id, peer: slot });
+                self.alerts.push(Alert::PeerConnected {
+                    torrent: self.torrent_id,
+                    peer: slot,
+                });
             }
             PeerToSession::Disconnected { slot, ref reason } => {
                 tracing::debug!(slot = slot.0, ?reason, "peer disconnected");
@@ -604,7 +607,10 @@ impl TorrentSession {
                     self.release_claims(slot);
                 }
                 self.pex.peer_disconnected(slot);
-                self.alerts.push(Alert::PeerDisconnected { torrent: self.torrent_id, peer: slot });
+                self.alerts.push(Alert::PeerDisconnected {
+                    torrent: self.torrent_id,
+                    peer: slot,
+                });
             }
             PeerToSession::Choked { slot } => {
                 if let Some(p) = self.peers.get_mut(&slot) {
@@ -644,7 +650,10 @@ impl TorrentSession {
                             p.have = bits;
                             self.picker.observe_peer_bitfield(&p.have);
                         } else {
-                            tracing::warn!(slot = slot.0, "Bitfield for unknown peer — biased select invariant violated?");
+                            tracing::warn!(
+                                slot = slot.0,
+                                "Bitfield for unknown peer — biased select invariant violated?"
+                            );
                         }
                         self.maybe_express_interest(slot);
                     }
@@ -660,7 +669,10 @@ impl TorrentSession {
                     p.announced_have_all = true;
                     self.picker.observe_peer_bitfield(&p.have);
                 } else {
-                    tracing::warn!(slot = slot.0, "HaveAll for unknown peer — biased select invariant violated?");
+                    tracing::warn!(
+                        slot = slot.0,
+                        "HaveAll for unknown peer — biased select invariant violated?"
+                    );
                 }
                 self.maybe_express_interest(slot);
             }
@@ -669,7 +681,10 @@ impl TorrentSession {
                     self.picker.forget_peer_bitfield(&p.have);
                     p.have = vec![false; self.params.piece_count as usize];
                 } else {
-                    tracing::warn!(slot = slot.0, "HaveNone for unknown peer — biased select invariant violated?");
+                    tracing::warn!(
+                        slot = slot.0,
+                        "HaveNone for unknown peer — biased select invariant violated?"
+                    );
                 }
                 self.maybe_express_interest(slot);
             }
@@ -749,7 +764,9 @@ impl TorrentSession {
         }
         self.completion_fired = true;
         // Step 1: emit the transition alert.
-        self.alerts.push(Alert::TorrentComplete { torrent: self.torrent_id });
+        self.alerts.push(Alert::TorrentComplete {
+            torrent: self.torrent_id,
+        });
         // Steps 2 + 3: choker swap and immediate re-eval. Choker isn't
         // wired into the actor yet; the hook is documented for the
         // follow-up wiring step.
@@ -940,12 +957,7 @@ impl TorrentSession {
         self.request_metadata_from_peer(slot);
     }
 
-    fn handle_extension_message(
-        &mut self,
-        slot: PeerSlot,
-        extension_name: &str,
-        payload: &[u8],
-    ) {
+    fn handle_extension_message(&mut self, slot: PeerSlot, extension_name: &str, payload: &[u8]) {
         match extension_name {
             "ut_metadata" => {
                 self.handle_ut_metadata(slot, payload);
@@ -1037,7 +1049,11 @@ impl TorrentSession {
     fn request_metadata_from_any_peer(&mut self) {
         let slots: Vec<PeerSlot> = self.peers.keys().copied().collect();
         for slot in slots {
-            if self.metadata_assembler.as_ref().is_none_or(|a| a.next_needed_piece().is_none()) {
+            if self
+                .metadata_assembler
+                .as_ref()
+                .is_none_or(|a| a.next_needed_piece().is_none())
+            {
                 break;
             }
             self.request_metadata_from_peer(slot);
@@ -1107,7 +1123,8 @@ impl TorrentSession {
                 if let Some(assembler) = &mut self.metadata_assembler {
                     let info_hash = self.info_hash;
                     let total_size = assembler.total_size();
-                    *assembler = crate::session::metadata_exchange::MetadataAssembler::new(info_hash);
+                    *assembler =
+                        crate::session::metadata_exchange::MetadataAssembler::new(info_hash);
                     if let Some(size) = total_size {
                         assembler.set_total_size(size);
                     }
@@ -1205,11 +1222,7 @@ impl TorrentSession {
                     .take(remaining)
                     .collect();
                 if !addrs.is_empty() {
-                    tracing::debug!(
-                        slot = slot.0,
-                        count = addrs.len(),
-                        "PEX: discovered peers"
-                    );
+                    tracing::debug!(slot = slot.0, count = addrs.len(), "PEX: discovered peers");
                     self.pex_discovered.extend(addrs);
                 }
                 // Dropped peers are informational — we manage our own
@@ -1262,7 +1275,10 @@ impl TorrentSession {
         if let Some(p) = self.peers.get(&slot) {
             let _ = p.tx.send(SessionToPeer::Shutdown);
         }
-        self.alerts.push(Alert::Error { torrent: self.torrent_id, code });
+        self.alerts.push(Alert::Error {
+            torrent: self.torrent_id,
+            code,
+        });
     }
 
     fn maybe_express_interest(&mut self, slot: PeerSlot) {
@@ -2114,9 +2130,7 @@ mod tests {
 
         match rx.try_recv() {
             Err(_) => {} // expected — no outbound message
-            Ok(other) => panic!(
-                "private torrent must not emit outbound PEX, got {other:?}"
-            ),
+            Ok(other) => panic!("private torrent must not emit outbound PEX, got {other:?}"),
         }
     }
 
@@ -2126,8 +2140,12 @@ mod tests {
         // has values, `drain_pex_discovered` must return empty on a
         // private torrent (defense in depth).
         let (mut session, _alerts) = private_session();
-        session.pex_discovered.push("10.0.0.1:6881".parse().unwrap());
-        session.pex_discovered.push("10.0.0.2:6881".parse().unwrap());
+        session
+            .pex_discovered
+            .push("10.0.0.1:6881".parse().unwrap());
+        session
+            .pex_discovered
+            .push("10.0.0.2:6881".parse().unwrap());
 
         let drained = session.drain_pex_discovered();
         assert!(

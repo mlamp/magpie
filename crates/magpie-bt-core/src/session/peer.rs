@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::session::messages::{DisconnectReason, PeerSlot, PeerToSession, SessionToPeer};
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use magpie_bt_wire::{
@@ -14,7 +15,6 @@ use magpie_bt_wire::{
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_util::codec::Framed;
-use crate::session::messages::{DisconnectReason, PeerSlot, PeerToSession, SessionToPeer};
 
 /// Default per-peer in-flight request ceiling. Single source of truth — the
 /// torrent actor mirrors this when registering a peer if no explicit value is
@@ -397,12 +397,10 @@ where
     /// back into normal handling.
     async fn exchange_extension_handshake(&mut self) -> Result<(), String> {
         // Build local extension ID assignments.
-        let local: HashMap<String, u8> = [
-            ("ut_metadata".to_owned(), 1u8),
-            ("ut_pex".to_owned(), 2u8),
-        ]
-        .into_iter()
-        .collect();
+        let local: HashMap<String, u8> =
+            [("ut_metadata".to_owned(), 1u8), ("ut_pex".to_owned(), 2u8)]
+                .into_iter()
+                .collect();
         let mut registry = ExtensionRegistry::new(local);
 
         // Encode and send our handshake.
@@ -421,8 +419,7 @@ where
 
         match maybe_msg {
             Ok(Some(Ok(Message::Extended { id: 0, payload }))) => {
-                let peer_hs = ExtensionHandshake::decode(&payload)
-                    .map_err(|e| e.to_string())?;
+                let peer_hs = ExtensionHandshake::decode(&payload).map_err(|e| e.to_string())?;
                 registry.set_remote(&peer_hs);
                 let extensions = peer_hs.extensions.clone();
                 let metadata_size = peer_hs.metadata_size;

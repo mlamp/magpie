@@ -19,11 +19,11 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
-use magpie_bt_wire::ExtensionHandshake;
 use magpie_bt_core::session::{
-    HandshakeRole, PeerConfig, PeerConn, PeerSlot, PeerToSession, PEER_TO_SESSION_CAPACITY,
+    HandshakeRole, PEER_TO_SESSION_CAPACITY, PeerConfig, PeerConn, PeerSlot, PeerToSession,
     perform_handshake,
 };
+use magpie_bt_wire::ExtensionHandshake;
 use magpie_bt_wire::{Message, WireCodec};
 use tokio::io::duplex;
 use tokio::sync::mpsc;
@@ -47,7 +47,10 @@ async fn extension_handshake_exchanged() {
         max_in_flight: 4,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_secs(5),
-        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+        extension_handshake_timeout: Duration::from_secs(5),
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
 
     let (peer_io, mut remote_io) = duplex(64 * 1024);
@@ -59,7 +62,13 @@ async fn extension_handshake_exchanged() {
         let remote = perform_handshake(&mut io, &handshake_cfg, HandshakeRole::Initiator)
             .await
             .expect("PeerConn handshake");
-        let conn = PeerConn::new(io, slot, handshake_cfg, peer_to_session_tx, session_to_peer_rx);
+        let conn = PeerConn::new(
+            io,
+            slot,
+            handshake_cfg,
+            peer_to_session_tx,
+            session_to_peer_rx,
+        );
         conn.run(remote).await;
     });
 
@@ -73,7 +82,10 @@ async fn extension_handshake_exchanged() {
         max_in_flight: 0,
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_secs(5),
-        extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+        extension_handshake_timeout: Duration::from_secs(5),
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
     let _remote_hs = perform_handshake(&mut remote_io, &remote_cfg, HandshakeRole::Responder)
         .await

@@ -231,9 +231,7 @@ impl ResumeSink for FileResumeSink {
             let mut pending = self.pending.lock().expect("FileResumeSink poisoned");
             // Deduplicate on info_hash — only the latest snapshot per
             // torrent matters for a batched flush.
-            if let Some(existing) =
-                pending.iter_mut().find(|s| s.info_hash == snap.info_hash)
-            {
+            if let Some(existing) = pending.iter_mut().find(|s| s.info_hash == snap.info_hash) {
                 *existing = snap;
             } else {
                 pending.push(snap);
@@ -310,7 +308,10 @@ fn encode_snapshot(snap: &ResumeSnapshot) -> Vec<u8> {
     use std::collections::BTreeMap;
     let bitfield = pack_bitfield(&snap.have);
     let mut dict: BTreeMap<Cow<'_, [u8]>, Value<'_>> = BTreeMap::new();
-    dict.insert(Cow::Borrowed(b"bitfield"), Value::Bytes(Cow::Owned(bitfield)));
+    dict.insert(
+        Cow::Borrowed(b"bitfield"),
+        Value::Bytes(Cow::Owned(bitfield)),
+    );
     dict.insert(
         Cow::Borrowed(b"info_hash"),
         Value::Bytes(Cow::Owned(snap.info_hash.to_vec())),
@@ -428,7 +429,9 @@ mod tests {
     fn sample_snap() -> ResumeSnapshot {
         ResumeSnapshot {
             info_hash: [0xABu8; 20],
-            have: vec![true, false, true, true, false, false, false, false, true, true],
+            have: vec![
+                true, false, true, true, false, false, false, false, true, true,
+            ],
             piece_count: 10,
             piece_length: 16_384,
             total_length: 163_840,
@@ -507,8 +510,10 @@ mod tests {
     fn sidecar_path_uses_hex_info_hash() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
-        let info_hash = [0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
-                         0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF];
+        let info_hash = [
+            0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+        ];
         let p = sink.sidecar_path(&info_hash);
         assert!(p.ends_with("deadbeef00112233445566778899aabbccddeeff.resume"));
     }
@@ -522,7 +527,10 @@ mod tests {
         let err = sink.enqueue(bad).unwrap_err();
         assert!(matches!(
             err,
-            ResumeSinkError::HaveLengthMismatch { have_len: 5, piece_count: 10 }
+            ResumeSinkError::HaveLengthMismatch {
+                have_len: 5,
+                piece_count: 10
+            }
         ));
     }
 
@@ -679,7 +687,9 @@ mod tests {
         let got = sink.load_sidecar(&s2.info_hash).unwrap().unwrap();
         assert_eq!(got.have, s2.have);
         // No lingering `.resume.tmp` file.
-        let tmp = sink.sidecar_path(&s2.info_hash).with_extension("resume.tmp");
+        let tmp = sink
+            .sidecar_path(&s2.info_hash)
+            .with_extension("resume.tmp");
         assert!(!tmp.exists());
     }
 }

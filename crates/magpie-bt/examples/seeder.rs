@@ -265,8 +265,7 @@ mod run {
         // Single-file: `--data` points at the file, lengths must match.
         // Multi-file: `--data` points at a directory; per-file size check
         // is delegated to MultiFileStorage::open_from_info.
-        let data_meta =
-            std::fs::metadata(&args.data).map_err(|e| format!("stat --data: {e}"))?;
+        let data_meta = std::fs::metadata(&args.data).map_err(|e| format!("stat --data: {e}"))?;
         if is_multi {
             if !data_meta.is_dir() {
                 return Err(format!(
@@ -314,9 +313,7 @@ mod run {
                     .map_err(|e| format!("open multi-file --data: {e}"))?,
             )
         } else {
-            Arc::new(
-                FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?,
-            )
+            Arc::new(FileStorage::open(&args.data).map_err(|e| format!("open --data: {e}"))?)
         };
         if args.verify {
             use magpie_bt_metainfo::sha1;

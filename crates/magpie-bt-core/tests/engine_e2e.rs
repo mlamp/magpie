@@ -75,7 +75,10 @@ async fn spawn_seeder(
             max_in_flight: 0,
             max_payload: 256 * 1024,
             handshake_timeout: Duration::from_secs(5),
-            extension_handshake_timeout: Duration::from_secs(5), remote_addr: None, metadata_size: None, local_listen_port: None,
+            extension_handshake_timeout: Duration::from_secs(5),
+            remote_addr: None,
+            metadata_size: None,
+            local_listen_port: None,
         };
         let mut stream = stream;
         let _remote = match perform_handshake(&mut stream, &cfg, HandshakeRole::Responder).await {

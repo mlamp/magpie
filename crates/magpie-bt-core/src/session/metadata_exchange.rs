@@ -209,10 +209,12 @@ impl MetadataAssembler {
         if self.total_size.is_none() {
             return Err(MetadataAssemblyError::SizeUnknown);
         }
-        let assembled = self.try_assemble().ok_or_else(|| MetadataAssemblyError::Incomplete {
-            received: self.received_count(),
-            total: self.piece_count,
-        })?;
+        let assembled = self
+            .try_assemble()
+            .ok_or_else(|| MetadataAssemblyError::Incomplete {
+                received: self.received_count(),
+                total: self.piece_count,
+            })?;
 
         // SHA-1 verify
         let actual_hash = sha1(&assembled);
@@ -230,15 +232,14 @@ impl MetadataAssembler {
         torrent_bytes.extend_from_slice(b"d4:info");
         torrent_bytes.extend_from_slice(&assembled);
         torrent_bytes.push(b'e');
-        let meta_info = magpie_bt_metainfo::parse(&torrent_bytes).map_err(|e| {
-            MetadataAssemblyError::ParseFailed(e.to_string())
-        })?;
-        let v1 = meta_info.info.v1.as_ref().ok_or_else(|| {
-            MetadataAssemblyError::ParseFailed("not a v1 info dict".to_string())
-        })?;
-        let piece_count = u32::try_from(v1.pieces.len() / 20).map_err(|_| {
-            MetadataAssemblyError::ParseFailed("piece count overflow".to_string())
-        })?;
+        let meta_info = magpie_bt_metainfo::parse(&torrent_bytes)
+            .map_err(|e| MetadataAssemblyError::ParseFailed(e.to_string()))?;
+        let v1 =
+            meta_info.info.v1.as_ref().ok_or_else(|| {
+                MetadataAssemblyError::ParseFailed("not a v1 info dict".to_string())
+            })?;
+        let piece_count = u32::try_from(v1.pieces.len() / 20)
+            .map_err(|_| MetadataAssemblyError::ParseFailed("piece count overflow".to_string()))?;
 
         // Sanity-check parsed values to reject absurd torrents that would
         // exhaust memory downstream. Limits are generous (2M pieces ≈ 32 TiB
@@ -258,9 +259,7 @@ impl MetadataAssembler {
 
         let total_length = match &v1.files {
             magpie_bt_metainfo::FileListV1::Single { length } => *length,
-            magpie_bt_metainfo::FileListV1::Multi { files } => {
-                files.iter().map(|f| f.length).sum()
-            }
+            magpie_bt_metainfo::FileListV1::Multi { files } => files.iter().map(|f| f.length).sum(),
         };
         let meta = TorrentParams {
             piece_count,
@@ -285,10 +284,12 @@ impl MetadataAssembler {
 
 fn hex_encode(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 #[cfg(test)]

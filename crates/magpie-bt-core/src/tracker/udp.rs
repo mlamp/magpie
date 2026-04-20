@@ -283,10 +283,8 @@ pub fn decode_scrape(
     for (i, hash) in info_hashes.iter().enumerate() {
         let off = 8 + i * 12;
         let seeders = u32::from_be_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
-        let completed =
-            u32::from_be_bytes(bytes[off + 4..off + 8].try_into().unwrap_or([0; 4]));
-        let leechers =
-            u32::from_be_bytes(bytes[off + 8..off + 12].try_into().unwrap_or([0; 4]));
+        let completed = u32::from_be_bytes(bytes[off + 4..off + 8].try_into().unwrap_or([0; 4]));
+        let leechers = u32::from_be_bytes(bytes[off + 8..off + 12].try_into().unwrap_or([0; 4]));
         files.insert(
             *hash,
             ScrapeFile {
@@ -415,9 +413,7 @@ impl UdpTracker {
                 .send_to(&req, self.target)
                 .await
                 .map_err(|e| TrackerError::Udp(format!("send CONNECT: {e}")))?;
-            if let Ok(Ok(resp)) =
-                tokio::time::timeout(retry_timeout(attempt), rx).await
-            {
+            if let Ok(Ok(resp)) = tokio::time::timeout(retry_timeout(attempt), rx).await {
                 return decode_connect(&resp.data, txid);
             }
         }
@@ -440,9 +436,7 @@ impl UdpTracker {
                 .send_to(&packet, self.target)
                 .await
                 .map_err(|e| TrackerError::Udp(format!("send ANNOUNCE: {e}")))?;
-            if let Ok(Ok(resp)) =
-                tokio::time::timeout(retry_timeout(attempt), rx).await
-            {
+            if let Ok(Ok(resp)) = tokio::time::timeout(retry_timeout(attempt), rx).await {
                 return decode_announce(&resp.data, txid);
             }
         }
@@ -484,19 +478,14 @@ impl UdpTracker {
                 .send_to(&packet, self.target)
                 .await
                 .map_err(|e| TrackerError::Udp(format!("send SCRAPE: {e}")))?;
-            if let Ok(Ok(resp)) =
-                tokio::time::timeout(retry_timeout(attempt), rx).await
-            {
+            if let Ok(Ok(resp)) = tokio::time::timeout(retry_timeout(attempt), rx).await {
                 return decode_scrape(&resp.data, txid, info_hashes);
             }
         }
         Err(TrackerError::Timeout(self.max_attempts))
     }
 
-    async fn do_scrape(
-        &self,
-        info_hashes: &[[u8; 20]],
-    ) -> Result<ScrapeResponse, TrackerError> {
+    async fn do_scrape(&self, info_hashes: &[[u8; 20]]) -> Result<ScrapeResponse, TrackerError> {
         let conn_id = self.ensure_connection_id().await?;
         match self.run_scrape(conn_id, info_hashes).await {
             Ok(r) => Ok(r),
@@ -711,8 +700,7 @@ mod tests {
         // counting CONNECT messages the mock tracker sees.
         let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let addr = sock.local_addr().unwrap();
-        let connect_count =
-            Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let connect_count = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let cc = Arc::clone(&connect_count);
         let task = tokio::spawn(async move {
             let mut buf = vec![0u8; 2048];
@@ -776,8 +764,7 @@ mod tests {
         let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
             .await
             .unwrap();
-        let client =
-            UdpTracker::new(Arc::clone(&demux), addr).with_max_attempts(1);
+        let client = UdpTracker::new(Arc::clone(&demux), addr).with_max_attempts(1);
         let err = client.do_announce(&sample_announce()).await.unwrap_err();
         match err {
             TrackerError::Failure(msg) => assert!(msg.contains("overloaded")),
@@ -803,8 +790,12 @@ mod tests {
 
     #[test]
     fn encode_scrape_lays_out_header_and_hashes() {
-        let buf = encode_scrape(0x1122_3344_5566_7788, 0xAABB_CCDD, &[[0xAA; 20], [0xBB; 20]])
-            .unwrap();
+        let buf = encode_scrape(
+            0x1122_3344_5566_7788,
+            0xAABB_CCDD,
+            &[[0xAA; 20], [0xBB; 20]],
+        )
+        .unwrap();
         assert_eq!(buf.len(), 16 + 40);
         assert_eq!(&buf[0..8], &0x1122_3344_5566_7788u64.to_be_bytes());
         assert_eq!(&buf[8..12], &ACTION_SCRAPE.to_be_bytes());

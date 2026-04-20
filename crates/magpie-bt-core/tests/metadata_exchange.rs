@@ -32,7 +32,7 @@ use magpie_bt_core::peer_filter::DefaultPeerFilter;
 use magpie_bt_core::session::{HandshakeRole, PeerConfig, TorrentParams, perform_handshake};
 use magpie_bt_core::storage::{MemoryStorage, Storage};
 use magpie_bt_metainfo::test_support::synthetic_torrent_v1;
-use magpie_bt_wire::{Message, MetadataMessage, WireCodec, METADATA_PIECE_SIZE};
+use magpie_bt_wire::{METADATA_PIECE_SIZE, Message, MetadataMessage, WireCodec};
 use tokio::net::TcpStream;
 use tokio_util::codec::Framed;
 
@@ -90,7 +90,9 @@ async fn seeder_serves_metadata_pieces() {
         max_payload: 256 * 1024,
         handshake_timeout: Duration::from_secs(5),
         extension_handshake_timeout: Duration::from_secs(5),
-        remote_addr: None, metadata_size: None, local_listen_port: None,
+        remote_addr: None,
+        metadata_size: None,
+        local_listen_port: None,
     };
     let remote_hs = perform_handshake(&mut stream, &cfg, HandshakeRole::Initiator)
         .await
@@ -146,8 +148,7 @@ async fn seeder_serves_metadata_pieces() {
                         assert_eq!(total_size, info_bytes.len() as u64);
                         // The piece data should match the first METADATA_PIECE_SIZE
                         // bytes (or all of info_bytes if smaller).
-                        let expected_end =
-                            METADATA_PIECE_SIZE.min(info_bytes.len());
+                        let expected_end = METADATA_PIECE_SIZE.min(info_bytes.len());
                         assert_eq!(&data[..], &info_bytes[..expected_end]);
                         break;
                     }
@@ -175,8 +176,7 @@ async fn magnet_metadata_fetch_and_download() {
     let info_bytes = meta.info_bytes.to_vec();
 
     // ---- Seeder setup ----
-    let seeder_storage: Arc<dyn Storage> =
-        Arc::new(MemoryStorage::new(synth.content.len() as u64));
+    let seeder_storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new(synth.content.len() as u64));
     seeder_storage.write_block(0, &synth.content).unwrap();
 
     let seeder_alerts = Arc::new(AlertQueue::new(128));
@@ -261,16 +261,16 @@ async fn magnet_metadata_fetch_and_download() {
             break;
         }
     }
-    assert!(got_metadata, "MetadataReceived alert not received within timeout");
+    assert!(
+        got_metadata,
+        "MetadataReceived alert not received within timeout"
+    );
     assert!(completed, "TorrentComplete not received within timeout");
 
     // Verify content integrity.
     let mut buf = vec![0u8; synth.content.len()];
     leecher_storage.read_block(0, &mut buf).unwrap();
-    assert_eq!(
-        buf, synth.content,
-        "downloaded content mismatch"
-    );
+    assert_eq!(buf, synth.content, "downloaded content mismatch");
 
     // Cleanup.
     seeder_engine.shutdown(_seed_tid).await;
@@ -282,9 +282,9 @@ async fn magnet_metadata_fetch_and_download() {
 // --- Helpers ---------------------------------------------------------------
 
 fn build_extension_handshake(ut_metadata_id: u8) -> Vec<u8> {
+    use magpie_bt_bencode::{Value, encode};
     use std::borrow::Cow;
     use std::collections::BTreeMap;
-    use magpie_bt_bencode::{Value, encode};
 
     let mut m = BTreeMap::<Cow<'_, [u8]>, Value<'_>>::new();
     m.insert(
@@ -296,9 +296,7 @@ fn build_extension_handshake(ut_metadata_id: u8) -> Vec<u8> {
     encode(&Value::Dict(dict))
 }
 
-async fn wait_for_extension_handshake<S>(
-    framed: &mut Framed<S, WireCodec>,
-) -> u8
+async fn wait_for_extension_handshake<S>(framed: &mut Framed<S, WireCodec>) -> u8
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -311,8 +309,7 @@ where
         match frame {
             Ok(Some(Ok(Message::Extended { id: 0, payload }))) => {
                 // Parse the extension handshake to get ut_metadata id
-                let dict =
-                    magpie_bt_bencode::decode(&payload).expect("decode extension handshake");
+                let dict = magpie_bt_bencode::decode(&payload).expect("decode extension handshake");
                 let d = dict.as_dict().expect("ext hs is dict");
                 let m = d
                     .get(&b"m"[..])
@@ -332,4 +329,3 @@ where
         }
     }
 }
-

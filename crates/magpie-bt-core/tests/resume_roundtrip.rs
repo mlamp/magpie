@@ -29,8 +29,8 @@ use std::time::Instant;
 use magpie_bt_core::alerts::{Alert, AlertCategory, AlertQueue};
 use magpie_bt_core::engine::{AddTorrentRequest, Engine, ListenConfig};
 use magpie_bt_core::peer_filter::DefaultPeerFilter;
-use magpie_bt_core::session::resume::{FileResumeSink, ResumeSink, ResumeSnapshot};
 use magpie_bt_core::session::TorrentParams;
+use magpie_bt_core::session::resume::{FileResumeSink, ResumeSink, ResumeSnapshot};
 use magpie_bt_core::storage::{MemoryStorage, Storage};
 use magpie_bt_metainfo::sha256;
 use magpie_bt_metainfo::test_support::synthetic_torrent_v1;
@@ -56,13 +56,7 @@ fn build_params(pieces: Vec<u8>) -> TorrentParams {
 
 fn extract_pieces(torrent: &[u8]) -> Vec<u8> {
     let parsed = magpie_bt_metainfo::parse(torrent).unwrap();
-    parsed
-        .info
-        .v1
-        .as_ref()
-        .unwrap()
-        .pieces
-        .to_vec()
+    parsed.info.v1.as_ref().unwrap().pieces.to_vec()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

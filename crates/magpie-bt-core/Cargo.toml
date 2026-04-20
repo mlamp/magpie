@@ -21,11 +21,16 @@ prometheus = []
 # dhat heap-profiling allocator for the soak example. Dev-only; never
 # enabled in library builds.
 dhat-heap = ["dep:dhat", "dep:libc", "magpie-bt-metainfo/test-support"]
+# Pulls in magpie-bt-dht and enables `Engine::attach_dht`. Off by default
+# per ADR-0001 — consumers who don't need DHT pay zero transitive build
+# cost.
+dht = ["dep:magpie-bt-dht"]
 
 [dependencies]
 magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.2" }
 magpie-bt-metainfo = { path = "../magpie-bt-metainfo", version = "0.1.2" }
 magpie-bt-wire = { path = "../magpie-bt-wire", version = "0.1.2" }
+magpie-bt-dht = { path = "../magpie-bt-dht", version = "0.1.2", optional = true }
 bytes.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true

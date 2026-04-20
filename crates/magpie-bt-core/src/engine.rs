@@ -209,11 +209,7 @@ pub struct AddMagnetRequest {
 impl AddMagnetRequest {
     /// Construct with magpie defaults.
     #[must_use]
-    pub fn new(
-        magnet: MagnetLink,
-        storage: Arc<dyn Storage>,
-        peer_id: [u8; 20],
-    ) -> Self {
+    pub fn new(magnet: MagnetLink, storage: Arc<dyn Storage>, peer_id: [u8; 20]) -> Self {
         Self {
             magnet,
             storage,
@@ -406,7 +402,7 @@ impl Default for AttachTrackerConfig {
 /// [`Engine::shutdown`] for every torrent then [`Engine::join`] before
 /// dropping.
 pub struct Engine {
-    alerts: Arc<AlertQueue>,
+    pub(crate) alerts: Arc<AlertQueue>,
     next_torrent_id: AtomicU64,
     next_peer_slot: AtomicU64,
     // E1: RwLock so concurrent `add_peer` / `disk_metrics` reads don't
@@ -432,7 +428,7 @@ pub struct Engine {
     /// Long-running Refiller task. Aborted in [`Self::join`] so callers
     /// awaiting join don't hang on the infinite refill loop.
     refiller_task: Mutex<Option<JoinHandle<()>>>,
-    tasks: Mutex<Vec<JoinHandle<()>>>,
+    pub(crate) tasks: Mutex<Vec<JoinHandle<()>>>,
     /// Cancellation token signalled by [`Self::join`]. The listener accept
     /// loop selects on a child of this token so it exits gracefully, giving
     /// peer tasks time to run cleanup before being aborted.
@@ -696,9 +692,9 @@ impl Engine {
         );
         // Attach the metadata assembler — this puts the session in
         // "metadata-fetching" mode.
-        session.set_metadata_assembler(
-            crate::session::metadata_exchange::MetadataAssembler::new(info_hash),
-        );
+        session.set_metadata_assembler(crate::session::metadata_exchange::MetadataAssembler::new(
+            info_hash,
+        ));
 
         let handshake_template = PeerConfig {
             peer_id: req.peer_id,
@@ -710,7 +706,7 @@ impl Engine {
             handshake_timeout: req.handshake_timeout,
             extension_handshake_timeout: req.extension_handshake_timeout,
             remote_addr: None,
-            metadata_size: None, // unknown until metadata arrives
+            metadata_size: None,     // unknown until metadata arrives
             local_listen_port: None, // stamped per-attach in attach_stream
         };
         let entry = TorrentEntry {
@@ -796,7 +792,8 @@ impl Engine {
         if !snapshot.peer_filter.allow(peer_addr) {
             return Err(AddPeerError::Filtered(peer_addr));
         }
-        self.attach_stream(snapshot, stream, role, Some(peer_addr)).await
+        self.attach_stream(snapshot, stream, role, Some(peer_addr))
+            .await
     }
 
     /// Disk metrics handle for the named torrent.
@@ -894,10 +891,7 @@ impl Engine {
     /// The returned `Vec<bool>` is a cloned snapshot: mutations in the
     /// actor do not affect it, and it does not lock the actor for the
     /// duration of the caller's work.
-    pub async fn torrent_bitfield_snapshot(
-        &self,
-        torrent_id: TorrentId,
-    ) -> Option<Vec<bool>> {
+    pub async fn torrent_bitfield_snapshot(&self, torrent_id: TorrentId) -> Option<Vec<bool>> {
         let cmd_tx = {
             let guard = self.torrents.read().await;
             let cmd_tx = guard.get(&torrent_id).map(|entry| entry.cmd_tx.clone())?;

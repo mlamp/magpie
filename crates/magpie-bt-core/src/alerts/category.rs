@@ -113,6 +113,10 @@ pub enum AlertErrorCode {
     HashMismatch,
     /// BEP 9 metadata verification failed too many times — giving up.
     MetadataVerifyExhausted,
+    /// A DHT announce / iterative lookup produced a terminal error
+    /// (outbound channel closed, shutdown, etc.). Emitted by
+    /// `Engine::attach_dht` (with the `dht` feature).
+    DhtAnnounceFailed,
 }
 
 /// Bit-flag set selecting alert categories.

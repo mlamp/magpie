@@ -231,10 +231,7 @@ pub fn parse_response(bytes: &[u8]) -> Result<AnnounceResponse, TrackerError> {
 /// [`TrackerError::InvalidUrl`] if `base_url` is empty, has no
 /// `announce` path segment (tracker doesn't advertise scrape per BEP
 /// 48 §Spec), or is otherwise malformed.
-pub fn build_scrape_url(
-    base_url: &str,
-    info_hashes: &[[u8; 20]],
-) -> Result<String, TrackerError> {
+pub fn build_scrape_url(base_url: &str, info_hashes: &[[u8; 20]]) -> Result<String, TrackerError> {
     if base_url.is_empty() {
         return Err(TrackerError::InvalidUrl("empty tracker URL".into()));
     }
@@ -303,9 +300,9 @@ pub fn parse_scrape_response(bytes: &[u8]) -> Result<ScrapeResponse, TrackerErro
         ));
     }
 
-    let files_val = dict.get(&b"files"[..]).ok_or_else(|| {
-        TrackerError::MalformedResponse("scrape response missing 'files'".into())
-    })?;
+    let files_val = dict
+        .get(&b"files"[..])
+        .ok_or_else(|| TrackerError::MalformedResponse("scrape response missing 'files'".into()))?;
     let files_dict = files_val
         .as_dict()
         .ok_or_else(|| TrackerError::MalformedResponse("'files' is not a dict".into()))?;
@@ -582,11 +579,8 @@ mod tests {
 
     #[test]
     fn build_scrape_url_preserves_query_string() {
-        let url = build_scrape_url(
-            "http://tr.example/announce?passkey=secret",
-            &[[0xAA; 20]],
-        )
-        .unwrap();
+        let url =
+            build_scrape_url("http://tr.example/announce?passkey=secret", &[[0xAA; 20]]).unwrap();
         assert!(
             url.starts_with("http://tr.example/scrape?passkey=secret&info_hash="),
             "url = {url}"
@@ -641,9 +635,8 @@ mod tests {
         let mut payload = Vec::new();
         payload.extend_from_slice(b"d5:filesd20:");
         payload.extend_from_slice(&[0xABu8; 20]);
-        payload.extend_from_slice(
-            b"d8:completei1e10:downloadedi2e10:incompletei3e4:name6:ubuntuee",
-        );
+        payload
+            .extend_from_slice(b"d8:completei1e10:downloadedi2e10:incompletei3e4:name6:ubuntuee");
         payload.extend_from_slice(b"e"); // close outer response dict
         let resp = parse_scrape_response(&payload).unwrap();
         let entry = &resp.files[&[0xAB; 20]];

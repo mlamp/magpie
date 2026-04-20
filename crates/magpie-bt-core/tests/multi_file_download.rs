@@ -276,7 +276,11 @@ async fn magpie_seed_to_magpie_leech_multi_file_sha256_match() {
     // 4. Overall SHA-256 check.
     let mut got = vec![0u8; TOTAL as usize];
     leech_storage.read_block(0, &mut got).expect("leech read");
-    assert_eq!(sha256(&got), content_sha256, "leech content SHA-256 mismatch");
+    assert_eq!(
+        sha256(&got),
+        content_sha256,
+        "leech content SHA-256 mismatch"
+    );
 
     // 5. Per-file SHA-256 check: each on-disk file matches its slice of
     //    the fixture content.
@@ -284,7 +288,12 @@ async fn magpie_seed_to_magpie_leech_multi_file_sha256_match() {
     for f in &fx.files {
         let file_path = leech_root.path().join(&f.path[0]);
         let on_disk = std::fs::read(&file_path).expect("per-file read");
-        assert_eq!(on_disk.len() as u64, f.length, "file length mismatch: {:?}", f.path);
+        assert_eq!(
+            on_disk.len() as u64,
+            f.length,
+            "file length mismatch: {:?}",
+            f.path
+        );
         let start = cursor as usize;
         let end = start + f.length as usize;
         let expected = &fx.content[start..end];
