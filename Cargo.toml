@@ -5,6 +5,7 @@ members = [
     "crates/magpie-bt-metainfo",
     "crates/magpie-bt-wire",
     "crates/magpie-bt-core",
+    "crates/magpie-bt-dht",
     "crates/magpie-bt",
 ]
 

@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 workstream A — DHT crate skeleton + wire types)
+
+First slice of the M4 DHT milestone: a new workspace member
+`magpie-bt-dht` with the load-bearing data model and KRPC wire
+codec. Transport wiring (UdpDemux integration), RPC handlers,
+bootstrap, tokens, and rate limits land in workstreams B–G.
+
+- `NodeId`: 20-byte newtype with XOR-distance metric (`Distance`
+  is `Ord`, usable as sort key), `leading_zeros` for bucket depth.
+- `generate_node_id` with two-phase BEP 42 salting (ADR-0026):
+  un-salted when public IP unknown, BEP-42 id derived once it is.
+  `validate_bep42` for optional strict-inbound checks. All 5 BEP 42
+  specification test vectors pass (`bep42_known_vectors`).
+- `Node` + `NodeQuality` state machine (`Good` ↔ `Questionable` ↔
+  `Bad`), with `on_reply` / `on_timeout` / `refresh_quality` per
+  ADR-0024. `Bucket` as the bucket-level data carrier capped at
+  `K = 8`. Split / eviction logic is workstream C.
+- `KrpcMessage` with `Query` (ping / find_node / get_peers /
+  announce_peer), `Response`, and `KrpcErrorPayload` — full
+  bencode round-trip with a typed `KrpcError` on malformed input.
+  Defensive caps on every variable-length field (transaction id,
+  token, `nodes` payload, `values` list, `v` string, error
+  message). Compact-node codecs for both BEP 5 (`nodes`, 26 B) and
+  BEP 32 (`nodes6`, 38 B).
+- 46 unit tests across the three modules + one doc-test.
+
+ADRs 0024–0026 (routing table, bootstrap, tokens + BEP 42 + rate
+limits) and the `004-dht.md` milestone doc landed in the prior
+commit (`e3f7d7c`) and are the spec this workstream implements.
+
 ### Changed (Track A hardening — resume sidecar DoS caps)
 
 Adversarial review of the resume-state path surfaced two unbounded

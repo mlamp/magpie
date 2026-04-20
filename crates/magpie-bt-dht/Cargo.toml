@@ -1,0 +1,25 @@
+[package]
+name = "magpie-bt-dht"
+description = "Mainline DHT (BEP 5) for the magpie BitTorrent library."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["bittorrent", "dht", "kademlia"]
+categories = ["network-programming"]
+readme = "README.md"
+
+[dependencies]
+magpie-bt-bencode = { path = "../magpie-bt-bencode", version = "0.1.2" }
+thiserror.workspace = true
+sha1.workspace = true
+getrandom.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

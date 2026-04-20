@@ -1256,6 +1256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "magpie-bt-dht"
+version = "0.1.2"
+dependencies = [
+ "getrandom 0.3.4",
+ "magpie-bt-bencode",
+ "proptest",
+ "sha1",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "magpie-bt-metainfo"
 version = "0.1.2"
 dependencies = [
