@@ -19,6 +19,7 @@ sha1.workspace = true
 getrandom.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "time", "macros"] }
 tracing.workspace = true
+futures-util = { workspace = true, features = ["std", "alloc"] }
 
 [dev-dependencies]
 proptest.workspace = true

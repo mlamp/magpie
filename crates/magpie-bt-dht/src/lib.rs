@@ -44,6 +44,7 @@
 mod bucket;
 mod handlers;
 mod krpc;
+mod lookup;
 mod node_id;
 mod peer_store;
 mod rate_limit;
@@ -61,6 +62,9 @@ pub use krpc::{
     CompactNode, CompactNode6, INFO_HASH_LEN, InfoHash, KrpcError, KrpcErrorPayload, KrpcKind,
     KrpcMessage, MAX_CLIENT_VERSION_LEN, MAX_ERROR_MESSAGE_LEN, MAX_NODES_BYTES, MAX_TOKEN_LEN,
     MAX_TRANSACTION_ID_LEN, MAX_VALUES_PEERS, Query, Response,
+};
+pub use lookup::{
+    ALPHA, GetPeersResult, MAX_LOOKUP_ROUNDS, announce_to_token_nodes, iterative_get_peers,
 };
 pub use node_id::{Distance, LocalNodeId, NodeId, generate_node_id, validate_bep42};
 pub use peer_store::{

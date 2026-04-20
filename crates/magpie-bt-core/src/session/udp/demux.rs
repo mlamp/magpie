@@ -206,8 +206,7 @@ impl UdpDemux {
     /// # Errors
     ///
     /// [`DemuxError::DhtAlreadyRegistered`] when called more than once —
-    /// the subscriber is a single-slot
-    /// [`OnceLock`](std::sync::OnceLock).
+    /// the subscriber is a single-slot [`std::sync::OnceLock`].
     pub fn register_dht(&self, tx: mpsc::Sender<UdpPacket>) -> Result<(), DemuxError> {
         self.dht_tx
             .set(tx)

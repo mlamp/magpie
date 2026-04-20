@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (M4 — iterative lookup + announce + private-flag regression)
+
+- `iterative_get_peers(runtime, info_hash)` — α = 3 parallel
+  Kademlia recursion, seeds with the `K` closest known nodes,
+  terminates after `MAX_STALE_ROUNDS` rounds without new-node
+  progress or `MAX_LOOKUP_ROUNDS` total (32).
+- `announce_to_token_nodes` — follow-up `announce_peer` fan-out
+  to the token-bearing closest nodes.
+- `DhtRuntime::announce(info_hash, port, private)` — full `get_peers`
+  + `announce_peer` pipeline. **When `private = true`, returns
+  `Ok(vec![])` without emitting a single KRPC message** — BEP 27
+  compliance, regression-locked in
+  `tests/three_dht_swarm.rs::announce_private_flag_emits_zero_krpc_messages`.
+- `DhtRuntime::find_peers(info_hash, private)` — get_peers without
+  the follow-up announce.
+- `DhtRuntime::closest_known(target, n)` for lookup seeding.
+
+### Added (M4 — three-Dht swarm integration test)
+
+First integration test covering DHT-only peer discovery. Three
+`DhtRuntime`s on a channel-based message broker; B announces for
+an info-hash, C rediscovers B's address via A. Proves the full
+path through routing table → get_peers → token issuance →
+announce_peer → peer-store population.
+
+Crate-total: 121 unit tests + 2 integration tests + 1 doc-test.
+
 ### Added (M4 — DhtRuntime public handle + handler dispatch loop)
 
 Glues the pieces — [`Dht`] transport pumps, `DhtState` (routing

@@ -28,6 +28,7 @@ use tokio::task::JoinHandle;
 
 use crate::handlers::{DhtState, handle_query};
 use crate::krpc::{InfoHash, Query, Response};
+use crate::lookup::{GetPeersResult, announce_to_token_nodes, iterative_get_peers};
 use crate::node_id::NodeId;
 use crate::peer_store::{PeerStore, PeerStoreConfig};
 use crate::rate_limit::{RateLimitConfig, RateLimiter};
@@ -178,6 +179,71 @@ impl DhtRuntime {
     pub async fn seed_contact(&self, id: NodeId, addr: SocketAddr, now: Instant) {
         let mut state = self.state.lock().await;
         state.routing.insert(id, addr, now);
+    }
+
+    /// Up to `n` closest known nodes to `target` from the routing
+    /// table, each as `(id, addr)`. Used by iterative lookups to
+    /// seed their candidate list.
+    pub async fn closest_known(&self, target: &NodeId, n: usize) -> Vec<(NodeId, SocketAddr)> {
+        let state = self.state.lock().await;
+        state
+            .routing
+            .find_closest(target, n)
+            .into_iter()
+            .map(|node| (node.id, node.addr))
+            .collect()
+    }
+
+    /// Announce our participation in the swarm for `info_hash`, and
+    /// return the peers the DHT knows about.
+    ///
+    /// When `private = true`, this method is a no-op: it returns
+    /// `Ok(vec![])` without sending a single KRPC message (BEP 27
+    /// private-torrent compliance). The regression test
+    /// `announce_private_flag_emits_zero_krpc_messages` in
+    /// `tests/three_dht_swarm.rs` locks this.
+    ///
+    /// `port` is the TCP/UDP port advertised to peers; set to 0
+    /// when the sender port should be used (the DHT will still
+    /// emit `implied_port = 0`; we keep the source port on the
+    /// receiving side).
+    ///
+    /// # Errors
+    ///
+    /// [`QueryError::OutboundClosed`] when the outbound channel
+    /// has shut down.
+    pub async fn announce(
+        &self,
+        info_hash: InfoHash,
+        port: u16,
+        private: bool,
+    ) -> Result<Vec<SocketAddr>, QueryError> {
+        if private {
+            return Ok(Vec::new());
+        }
+        let GetPeersResult { peers, token_nodes } = iterative_get_peers(self, info_hash).await;
+        announce_to_token_nodes(self, info_hash, port, &token_nodes).await;
+        Ok(peers)
+    }
+
+    /// Iterative `get_peers` without the follow-up announce — useful
+    /// when we only want to discover peers (leeching without
+    /// participating as a seeder).
+    ///
+    /// When `private = true`, returns `Ok(vec![])` with no KRPC traffic.
+    ///
+    /// # Errors
+    ///
+    /// None in the normal path; the result is empty on failure.
+    pub async fn find_peers(
+        &self,
+        info_hash: InfoHash,
+        private: bool,
+    ) -> Result<Vec<SocketAddr>, QueryError> {
+        if private {
+            return Ok(Vec::new());
+        }
+        Ok(iterative_get_peers(self, info_hash).await.peers)
     }
 }
 
