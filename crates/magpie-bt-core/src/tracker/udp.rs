@@ -678,6 +678,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "binds real UdpSocket; miri isolation blocks socket()")]
     async fn udp_tracker_connects_and_announces() {
         let (tracker_addr, tracker_task) = spawn_mock_tracker().await;
         let (demux, _rx_task) = UdpDemux::bind("127.0.0.1:0".parse().unwrap())
@@ -694,6 +695,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "binds real UdpSocket; miri isolation blocks socket()")]
     async fn udp_tracker_caches_connection_id_across_announces() {
         // Two announces back-to-back; the second should skip CONNECT
         // because the cached id is still valid. We detect this by
@@ -746,6 +748,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "binds real UdpSocket; miri isolation blocks socket()")]
     async fn udp_tracker_surfaces_tracker_error() {
         // Mock tracker that replies ACTION_ERROR to CONNECT. The client
         // should propagate as TrackerError::Failure.
@@ -864,6 +867,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "binds real UdpSocket; miri isolation blocks socket()")]
     async fn udp_tracker_scrape_end_to_end() {
         // Mock tracker: respond to CONNECT, then to SCRAPE with a
         // canned 2-file response.
@@ -919,6 +923,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "binds real UdpSocket; miri isolation blocks socket()")]
     async fn udp_tracker_times_out_when_no_response() {
         // No mock tracker is listening at the target address. The
         // client should run its full retry curve (clamped by

@@ -314,6 +314,10 @@ impl UdpDemux {
 }
 
 #[cfg(test)]
+// Every test in this module binds a real UdpSocket. Miri's default
+// isolation blocks socket() syscalls, so the whole module is excluded
+// from miri runs. See docs/DISCIPLINES.md.
+#[cfg(not(miri))]
 mod tests {
     use super::*;
 

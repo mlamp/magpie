@@ -38,7 +38,7 @@ The bars every change must clear. Scan in ≤2 minutes. Anything that isn't enfo
 
 - **MSRV**: stable − 2 minor versions. Recorded in `clippy.toml` and each `Cargo.toml` `rust-version`. Bumps require a `CHANGELOG.md` entry.
 - **CI** (`.github/workflows/ci.yml`): `fmt`, `clippy -D warnings`, `test` on Linux + macOS, `doc` (`RUSTDOCFLAGS=-D warnings`), `cargo-deny check`, `cargo-llvm-cov` with thresholds.
-- **Nightly** (`.github/workflows/nightly.yml`): `cargo-fuzz` per target + `cargo miri test --lib`.
+- **Nightly** (`.github/workflows/nightly.yml`): `cargo-fuzz` per target + `cargo miri test --workspace --lib`. Tests that perform I/O miri cannot emulate (socket binds, real-network calls, filesystem outside `CARGO_TARGET_DIR`) must be marked `#[cfg_attr(miri, ignore)]`, or live in a `#[cfg(not(miri))]` test module if the whole module is I/O. Do not silence miri with `-Zmiri-disable-isolation` — its syscall emulation is partial and would let bugs through.
 - **Supply chain** (`deny.toml`): GPL-family denied; RUSTSEC advisories deny-by-default (exceptions require an ADR); duplicate versions warn.
 - **SemVer**: `cargo-public-api` diff posted on every PR once a crate reaches v0.1. Pre-0.1 is best-effort but breaking changes still land in the CHANGELOG.
 - **Docs**: every `pub` item has a rustdoc summary line. Every crate root has an intro + runnable example. CI: `cargo doc --no-deps -D warnings`.
