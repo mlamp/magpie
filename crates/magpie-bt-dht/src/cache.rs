@@ -328,6 +328,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks open/write")]
     fn file_cache_save_load_roundtrip() {
         let tmp =
             std::env::temp_dir().join(format!("magpie-dht-cache-{}.bencode", std::process::id()));
@@ -341,6 +342,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks open/write")]
     fn file_cache_missing_file_returns_empty() {
         let cache = FileContactCache::new(std::env::temp_dir().join(format!(
             "magpie-dht-cache-missing-{}.bencode",

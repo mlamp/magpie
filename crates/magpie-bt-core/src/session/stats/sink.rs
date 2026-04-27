@@ -272,6 +272,10 @@ fn encode_bencode(snap: &StatsSnapshot) -> Vec<u8> {
 }
 
 #[cfg(test)]
+// Every test in this module writes a real bencode sidecar to disk.
+// Miri's default isolation blocks mkdir/open/write, so the whole
+// module is excluded from miri runs. See docs/DISCIPLINES.md.
+#[cfg(not(miri))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

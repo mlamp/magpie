@@ -749,6 +749,12 @@ fn prune_empty_dirs(start: &Path, stop_at: &Path) {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+// Most tests in this module create real files via FileStorage and FdPool.
+// The remaining tests cover path-spec validation (`validate_specs`) and
+// FdPool capacity clamps — pure safe Rust with no unsafe code, so miri
+// adds little signal there. Excluding the whole module from miri keeps
+// new FS tests auto-covered. See docs/DISCIPLINES.md.
+#[cfg(not(miri))]
 mod tests {
     use super::*;
 

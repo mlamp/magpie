@@ -168,6 +168,10 @@ fn read_exact_at(file: &File, mut buf: &mut [u8], mut offset: u64) -> std::io::R
 }
 
 #[cfg(test)]
+// Every test in this module touches the real filesystem (tempdir +
+// FileStorage I/O). Miri's default isolation blocks mkdir/open/write,
+// so the whole module is excluded from miri runs. See docs/DISCIPLINES.md.
+#[cfg(not(miri))]
 mod tests {
     use super::*;
     use tempfile::tempdir;
