@@ -55,3 +55,37 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: miri test
         run: cargo miri test --workspace --lib
+
+  # Open (or comment on) a tracking issue when a SCHEDULED run fails, so a
+  # red nightly turns into a notification rather than a silent badge.
+  # Manual `workflow_dispatch` reruns are exempt — they're for verifying
+  # fixes and shouldn't file issues.
+  notify-on-failure:
+    name: Notify on scheduled failure
+    needs: [fuzz, miri]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          TITLE: "Nightly is red (auto-filed)"
+        run: |
+          set -euo pipefail
+          failed=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | "- \(.name)"] | join("\n")')
+          [ -z "$failed" ] && failed="- (job list unavailable; see run page)"
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --search "in:title \"$TITLE\"" --json number --jq '.[0].number // ""')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body \
+              "Nightly failed again — $RUN_URL"$'\n\nFailed jobs:\n'"$failed"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body \
+              "The scheduled nightly workflow failed."$'\n\n'"Latest failing run: $RUN_URL"$'\n\nFailed jobs:\n'"$failed"$'\n\nAuto-filed by `.github/workflows/nightly.yml`. Triage the failing job(s), push a fix, then close this issue once the next scheduled nightly is green.'
+          fi
