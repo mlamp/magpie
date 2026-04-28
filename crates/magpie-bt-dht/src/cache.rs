@@ -126,7 +126,7 @@ impl FileContactCache {
     ///
     /// [`CacheError::Io`] for filesystem failures.
     pub fn save(&self, contacts: &[CachedContact]) -> Result<(), CacheError> {
-        let bytes = encode_cache(contacts);
+        let bytes = encode_cache(contacts, SystemTime::now());
         let tmp = self.path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
         fs::rename(&tmp, &self.path)?;
@@ -138,14 +138,14 @@ impl FileContactCache {
 // Encode / decode
 // ---------------------------------------------------------------------------
 
-fn encode_cache(contacts: &[CachedContact]) -> Vec<u8> {
+fn encode_cache(contacts: &[CachedContact], saved_at: SystemTime) -> Vec<u8> {
     use std::borrow::Cow;
     use std::collections::BTreeMap;
 
     let mut root: BTreeMap<Cow<'_, [u8]>, Value<'_>> = BTreeMap::new();
     root.insert(Cow::Borrowed(b"v"), Value::Int(CACHE_SCHEMA_VERSION));
 
-    let saved_at_secs = SystemTime::now()
+    let saved_at_secs = saved_at
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -268,14 +268,14 @@ mod tests {
     #[test]
     fn encode_decode_roundtrip() {
         let contacts = vec![contact(1, 6881), contact(2, 51413), contact(3, 7777)];
-        let bytes = encode_cache(&contacts);
+        let bytes = encode_cache(&contacts, UNIX_EPOCH);
         let got = decode_cache(&bytes).unwrap();
         assert_eq!(got, contacts);
     }
 
     #[test]
     fn empty_cache_roundtrips() {
-        let bytes = encode_cache(&[]);
+        let bytes = encode_cache(&[], UNIX_EPOCH);
         let got = decode_cache(&bytes).unwrap();
         assert!(got.is_empty());
     }
@@ -322,7 +322,7 @@ mod tests {
     fn encode_truncates_to_max_contacts() {
         let cap = u8::try_from(CACHE_MAX_CONTACTS).unwrap();
         let contacts: Vec<CachedContact> = (0..(cap + 20)).map(|i| contact(i, 6881)).collect();
-        let bytes = encode_cache(&contacts);
+        let bytes = encode_cache(&contacts, UNIX_EPOCH);
         let got = decode_cache(&bytes).unwrap();
         assert_eq!(got.len(), CACHE_MAX_CONTACTS);
     }
