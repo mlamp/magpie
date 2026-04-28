@@ -108,6 +108,10 @@ mod tests {
     use crate::session::shaper::{DuplexBuckets, Shaper};
 
     #[tokio::test]
+    #[cfg_attr(
+        miri,
+        ignore = "wall-clock timing test; miri's serialized execution drops tick rate below threshold"
+    )]
     async fn refill_loop_ticks_at_configured_interval() {
         let shaper = Arc::new(Shaper::new());
         let interval = Duration::from_millis(10);
