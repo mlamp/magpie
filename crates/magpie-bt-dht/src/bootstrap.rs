@@ -273,8 +273,8 @@ mod tests {
     fn default_constants_match_adr_0025() {
         assert_eq!(DEFAULT_EXIT_GOOD_NODES, 32);
         assert_eq!(DEFAULT_STALL_THRESHOLD, 4);
-        assert_eq!(DEFAULT_STALL_AFTER, Duration::from_secs(10 * 60));
+        assert_eq!(DEFAULT_STALL_AFTER, Duration::from_mins(10));
         assert_eq!(DEFAULT_PING_BATCH, 8);
-        assert_eq!(DEFAULT_ROUND_INTERVAL, Duration::from_secs(60));
+        assert_eq!(DEFAULT_ROUND_INTERVAL, Duration::from_mins(1));
     }
 }

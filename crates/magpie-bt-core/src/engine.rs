@@ -389,7 +389,7 @@ impl Default for AttachTrackerConfig {
         Self {
             listen_port: 6881,
             num_want: Some(50),
-            error_backoff: Duration::from_secs(60),
+            error_backoff: Duration::from_mins(1),
         }
     }
 }

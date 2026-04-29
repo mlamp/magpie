@@ -20,7 +20,7 @@ use crate::session::messages::PeerSlot;
 const MAX_PEX_ADVERTISE: usize = 50;
 
 /// Minimum interval between outbound PEX sends to the same peer.
-pub const PEX_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+pub const PEX_INTERVAL: std::time::Duration = std::time::Duration::from_mins(1);
 
 /// Minimum interval between accepting inbound PEX messages from the same
 /// peer. Messages arriving faster than this are silently dropped to prevent

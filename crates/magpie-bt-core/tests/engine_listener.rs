@@ -155,7 +155,7 @@ async fn listener_accepts_inbound_and_fetches_via_two_seeders() {
     )
     .await;
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let deadline = std::time::Instant::now() + Duration::from_mins(1);
     let mut total_completed = 0usize;
     let mut all_alerts_seen: Vec<String> = Vec::new();
     loop {

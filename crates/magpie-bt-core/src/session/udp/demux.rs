@@ -42,7 +42,7 @@ const RECV_BUFFER_SIZE: usize = 8192;
 
 /// Default TTL for tracker transaction registrations (BEP 15 scrape/announce
 /// retries happen within this window).
-pub const DEFAULT_TRACKER_TXN_TTL: Duration = Duration::from_secs(60);
+pub const DEFAULT_TRACKER_TXN_TTL: Duration = Duration::from_mins(1);
 
 /// Cap on the number of simultaneously pending tracker transactions per
 /// demux. Per ADR-0015; guards against a runaway tracker from pinning

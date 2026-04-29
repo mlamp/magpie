@@ -38,10 +38,10 @@ pub const LSD_MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(239, 192, 152, 143);
 pub const LSD_PORT: u16 = 6771;
 
 /// Default announce interval (5 minutes).
-pub const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(300);
+pub const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_mins(5);
 
 /// Minimum announce interval (1 minute).
-pub const MIN_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(60);
+pub const MIN_ANNOUNCE_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Maximum receive buffer size for incoming LSD messages.
 const MAX_MSG_SIZE: usize = 4096;
@@ -740,7 +740,7 @@ mod tests {
         let config_b = LsdConfig::default();
         let (service_b, mut rx_b) = LsdService::new(
             LsdConfig {
-                announce_interval: Duration::from_secs(300),
+                announce_interval: Duration::from_mins(5),
                 ..config_b
             },
             6882,

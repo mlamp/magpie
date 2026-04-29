@@ -142,7 +142,7 @@ mod tests {
             let id = self.id;
             Box::pin(async move {
                 Ok(AnnounceResponse {
-                    interval: Duration::from_secs(1800),
+                    interval: Duration::from_mins(30),
                     min_interval: None,
                     peers: Vec::new(),
                     tracker_id: Some(vec![id as u8]),

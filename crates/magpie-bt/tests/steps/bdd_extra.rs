@@ -58,7 +58,7 @@ impl Tracker for WorkingTracker {
         Box::pin(async move {
             *self._hits.lock().unwrap() += 1;
             Ok(AnnounceResponse {
-                interval: std::time::Duration::from_secs(1800),
+                interval: std::time::Duration::from_mins(30),
                 min_interval: None,
                 peers: (0..n)
                     .map(|i| format!("10.0.0.{}:6881", i + 1).parse().unwrap())

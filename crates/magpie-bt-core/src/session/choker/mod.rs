@@ -37,7 +37,7 @@ pub const DEFAULT_OPTIMISTIC_SLOTS: usize = 1;
 
 /// Default leech-side anti-snub window: a peer we've unchoked but who hasn't
 /// delivered a block in this long is dropped from consideration.
-pub const DEFAULT_ANTI_SNUB: Duration = Duration::from_secs(60);
+pub const DEFAULT_ANTI_SNUB: Duration = Duration::from_mins(1);
 
 /// Default weight multiplier for new (recently-connected) peers in the
 /// optimistic draw.

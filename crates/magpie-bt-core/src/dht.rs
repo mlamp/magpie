@@ -50,8 +50,8 @@ impl Default for AttachDhtConfig {
         Self {
             listen_port: 6881,
             private: false,
-            announce_interval: Duration::from_secs(30 * 60),
-            error_backoff: Duration::from_secs(60),
+            announce_interval: Duration::from_mins(30),
+            error_backoff: Duration::from_mins(1),
         }
     }
 }

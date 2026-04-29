@@ -650,7 +650,7 @@ mod tests {
             t.on_timeout(&nid);
         }
         // Within grace window: not pruned.
-        assert!(t.prune_bad(t0 + Duration::from_secs(60)).is_empty());
+        assert!(t.prune_bad(t0 + Duration::from_mins(1)).is_empty());
         assert_eq!(t.node_count(), 1);
         // Past grace window: pruned.
         let removed = t.prune_bad(t0 + BAD_REMOVE_AFTER + Duration::from_secs(1));
@@ -663,7 +663,7 @@ mod tests {
         let t0 = Instant::now();
         let mut t = RoutingTable::new(NodeId::ZERO, t0);
         t.insert(id(0x80, 1), addr(7000), t0);
-        assert!(t.stale_buckets(t0 + Duration::from_secs(60)).is_empty());
+        assert!(t.stale_buckets(t0 + Duration::from_mins(1)).is_empty());
         assert_eq!(
             t.stale_buckets(t0 + BUCKET_REFRESH_AFTER + Duration::from_secs(1)),
             vec![0]

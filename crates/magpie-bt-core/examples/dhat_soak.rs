@@ -216,7 +216,7 @@ async fn rss_sampler(peak: Arc<AtomicI64>, duration: Duration) {
         let rss = peak_rss_kib();
         peak.fetch_max(rss, Ordering::Relaxed);
         eprintln!("[dhat-soak] RSS snapshot: {rss} KiB");
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_mins(1)).await;
     }
 }
 
@@ -240,7 +240,7 @@ async fn main() {
     };
 
     let deadline = Instant::now() + duration;
-    let cycle_timeout = Duration::from_secs(60);
+    let cycle_timeout = Duration::from_mins(1);
     let mut cycle = 0_u64;
 
     while Instant::now() < deadline {

@@ -49,7 +49,7 @@ pub const ACTION_SCRAPE: u32 = 2;
 pub const ACTION_ERROR: u32 = 3;
 
 /// Connection-id validity window (BEP 15).
-pub const CONNECTION_ID_TTL: Duration = Duration::from_secs(60);
+pub const CONNECTION_ID_TTL: Duration = Duration::from_mins(1);
 
 /// Encode a CONNECT request.
 #[must_use]
@@ -599,7 +599,7 @@ mod tests {
         resp.extend_from_slice(&[192, 168, 1, 5, 0x1A, 0xE1]); // 192.168.1.5:6881
         resp.extend_from_slice(&[10, 0, 0, 1, 0x1A, 0xE1]); // 10.0.0.1:6881
         let r = decode_announce(&resp, 0xAAAA_BBBB).unwrap();
-        assert_eq!(r.interval, Duration::from_secs(1800));
+        assert_eq!(r.interval, Duration::from_mins(30));
         assert_eq!(r.complete, Some(20));
         assert_eq!(r.incomplete, Some(10));
         assert_eq!(r.peers.len(), 2);
@@ -610,7 +610,7 @@ mod tests {
     fn retry_timeout_follows_bep15_curve() {
         assert_eq!(retry_timeout(0), Duration::from_secs(15));
         assert_eq!(retry_timeout(1), Duration::from_secs(30));
-        assert_eq!(retry_timeout(2), Duration::from_secs(60));
+        assert_eq!(retry_timeout(2), Duration::from_mins(1));
         assert_eq!(retry_timeout(7), Duration::from_secs(1920));
         assert_eq!(retry_timeout(8), Duration::from_secs(3840)); // cap
         assert_eq!(retry_timeout(20), Duration::from_secs(3840));
@@ -686,7 +686,7 @@ mod tests {
             .unwrap();
         let client = UdpTracker::new(Arc::clone(&demux), tracker_addr);
         let resp = client.do_announce(&sample_announce()).await.unwrap();
-        assert_eq!(resp.interval, Duration::from_secs(1800));
+        assert_eq!(resp.interval, Duration::from_mins(30));
         assert_eq!(resp.complete, Some(7));
         assert_eq!(resp.incomplete, Some(5));
         assert_eq!(resp.peers.len(), 1);

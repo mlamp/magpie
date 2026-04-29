@@ -166,7 +166,7 @@ async fn cold_start_reaches_operational() {
         seed_contacts: bootstrap_hosts.iter().map(|h| h.addr).collect(),
         round_interval: Duration::from_millis(20),
         stalled_interval: Duration::from_millis(20),
-        stall_after: Duration::from_secs(60),
+        stall_after: Duration::from_mins(1),
         contact_query_timeout: Duration::from_secs(2),
         exit_good_nodes: 24,
         ..BootstrapConfig::default()

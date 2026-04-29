@@ -527,7 +527,7 @@ mod tests {
         payload.extend_from_slice(&[10, 0, 0, 1, 0x1A, 0xE1, 192, 168, 1, 2, 0xC0, 0x35]);
         payload.push(b'e');
         let resp = parse_for_test(&payload).unwrap();
-        assert_eq!(resp.interval, Duration::from_secs(1800));
+        assert_eq!(resp.interval, Duration::from_mins(30));
         assert_eq!(resp.complete, Some(5));
         assert_eq!(resp.incomplete, Some(2));
         assert_eq!(resp.peers.len(), 2);

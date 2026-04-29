@@ -121,7 +121,7 @@ mod tests {
     fn snubbed_peers_excluded() {
         let ch = LeechChoker::new();
         let now = Instant::now();
-        let old = now - Duration::from_secs(120);
+        let old = now - Duration::from_mins(2);
         let peers = vec![
             peer(1, 1000, old), // snubbed
             peer(2, 200, now),

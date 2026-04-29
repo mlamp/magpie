@@ -340,7 +340,7 @@ mod tests {
         let src = ip(1, 2, 3, 4);
         rl.check_inbound(src, t0);
         // Sweep soon after — last_refill is recent, bucket retained.
-        rl.sweep_idle(t0 + Duration::from_secs(60), Duration::from_secs(500));
+        rl.sweep_idle(t0 + Duration::from_mins(1), Duration::from_secs(500));
         assert_eq!(rl.tracked_source_ips(), 1);
     }
 

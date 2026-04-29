@@ -227,7 +227,7 @@ mod tests {
     fn needs_rotation_fires_at_interval() {
         let t0 = Instant::now();
         let secrets = TokenSecrets::new(t0).unwrap();
-        assert!(!secrets.needs_rotation(t0 + Duration::from_secs(60), TOKEN_ROTATION_INTERVAL));
+        assert!(!secrets.needs_rotation(t0 + Duration::from_mins(1), TOKEN_ROTATION_INTERVAL));
         assert!(secrets.needs_rotation(
             t0 + TOKEN_ROTATION_INTERVAL + Duration::from_secs(1),
             TOKEN_ROTATION_INTERVAL,

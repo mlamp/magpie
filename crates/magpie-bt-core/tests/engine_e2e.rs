@@ -164,7 +164,7 @@ async fn engine_fetches_synthetic_torrent_from_three_tcp_seeders() {
     // test spins 3 mock seeders + 1 engine leech on one runtime; under
     // coverage instrumentation + `--all-features` on shared CI runners
     // the budget must be very generous to avoid flakes.
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let deadline = std::time::Instant::now() + Duration::from_mins(1);
     let mut total_completed = 0usize;
     let mut all_alerts_seen: Vec<String> = Vec::new();
     loop {
@@ -276,7 +276,7 @@ async fn engine_attach_tracker_drives_announce_loop_and_filters_peers() {
         .unwrap();
 
     // 60 s budget — generous for shared CI runners under coverage.
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let deadline = std::time::Instant::now() + Duration::from_mins(1);
     let mut total_completed = 0usize;
     let mut all_alerts_seen: Vec<String> = Vec::new();
     loop {

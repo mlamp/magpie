@@ -226,8 +226,8 @@ mod tests {
         let t0 = Instant::now();
         let mut store = PeerStore::new(PeerStoreConfig::default());
         store.announce(hash(1), peer(1), t0);
-        store.announce(hash(1), peer(2), t0 + Duration::from_secs(60));
-        store.announce(hash(1), peer(3), t0 + Duration::from_secs(120));
+        store.announce(hash(1), peer(2), t0 + Duration::from_mins(1));
+        store.announce(hash(1), peer(3), t0 + Duration::from_mins(2));
         let got = store.peers_for(&hash(1), 3);
         assert_eq!(got, vec![peer(3), peer(2), peer(1)]);
     }
@@ -237,7 +237,7 @@ mod tests {
         let t0 = Instant::now();
         let mut store = PeerStore::new(PeerStoreConfig::default());
         store.announce(hash(1), peer(1), t0);
-        store.announce(hash(1), peer(1), t0 + Duration::from_secs(60));
+        store.announce(hash(1), peer(1), t0 + Duration::from_mins(1));
         assert_eq!(store.peer_count(&hash(1)), 1);
     }
 
@@ -245,7 +245,7 @@ mod tests {
     fn sweep_removes_stale_peers() {
         let t0 = Instant::now();
         let mut store = PeerStore::new(PeerStoreConfig {
-            peer_staleness: Duration::from_secs(60),
+            peer_staleness: Duration::from_mins(1),
             ..PeerStoreConfig::default()
         });
         store.announce(hash(1), peer(1), t0);
@@ -261,11 +261,11 @@ mod tests {
     fn sweep_removes_empty_torrents() {
         let t0 = Instant::now();
         let mut store = PeerStore::new(PeerStoreConfig {
-            peer_staleness: Duration::from_secs(60),
+            peer_staleness: Duration::from_mins(1),
             ..PeerStoreConfig::default()
         });
         store.announce(hash(1), peer(1), t0);
-        store.sweep(t0 + Duration::from_secs(120));
+        store.sweep(t0 + Duration::from_mins(2));
         assert_eq!(store.torrent_count(), 0);
     }
 
