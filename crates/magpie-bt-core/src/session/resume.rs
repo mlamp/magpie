@@ -488,7 +488,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn file_sink_writes_and_loads_sidecar() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -500,7 +503,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn load_missing_sidecar_returns_none() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -509,7 +515,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn sidecar_path_uses_hex_info_hash() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -522,7 +531,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn enqueue_rejects_have_length_mismatch() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -539,7 +551,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn enqueue_deduplicates_on_info_hash() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -613,7 +628,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn flush_graceful_is_bounded() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -654,7 +672,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn load_rejects_oversize_sidecar_file() {
         let dir = tempdir().unwrap();
         let sink = FileResumeSink::new(dir.path()).unwrap();
@@ -677,7 +698,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "touches the filesystem; miri isolation blocks mkdir/write")]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the filesystem; miri isolation blocks mkdir/write"
+    )]
     fn atomic_write_preserves_prior_on_failure() {
         // Write snap1, then enqueue snap2 and flush. The final on-disk
         // contents must be snap2 (atomic rename means no half-written

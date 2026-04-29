@@ -106,14 +106,12 @@ impl MagnetLink {
 
             match key {
                 "xt" => {
-                    let hash_str = value
-                        .strip_prefix("urn:btih:")
-                        .ok_or_else(|| {
-                            MagnetError::InvalidInfoHash(format!(
-                                "expected `urn:btih:` prefix, got `{}`",
-                                truncate_for_error(value),
-                            ))
-                        })?;
+                    let hash_str = value.strip_prefix("urn:btih:").ok_or_else(|| {
+                        MagnetError::InvalidInfoHash(format!(
+                            "expected `urn:btih:` prefix, got `{}`",
+                            truncate_for_error(value),
+                        ))
+                    })?;
                     if info_hash.is_some() {
                         return Err(MagnetError::InvalidInfoHash(
                             "duplicate xt parameter".into(),
@@ -156,9 +154,9 @@ impl MagnetLink {
                             "x.pe parameter value too long".into(),
                         ));
                     }
-                    let addr: SocketAddr = decoded.parse().map_err(|_| {
-                        MagnetError::InvalidPeerAddr(truncate_for_error(&decoded))
-                    })?;
+                    let addr: SocketAddr = decoded
+                        .parse()
+                        .map_err(|_| MagnetError::InvalidPeerAddr(truncate_for_error(&decoded)))?;
                     peer_addrs.push(addr);
                 }
                 // Forward-compatible: ignore unknown parameters.
@@ -367,10 +365,7 @@ mod tests {
 
     #[test]
     fn uppercase_hex_hash() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{}",
-            EMPTY_SHA1_HEX.to_uppercase()
-        );
+        let uri = format!("magnet:?xt=urn:btih:{}", EMPTY_SHA1_HEX.to_uppercase());
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.info_hash, empty_sha1_bytes());
     }
@@ -391,18 +386,14 @@ mod tests {
 
     #[test]
     fn display_name_url_decoded() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&dn=My%20Cool%20Torrent%21"
-        );
+        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&dn=My%20Cool%20Torrent%21");
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.display_name.as_deref(), Some("My Cool Torrent!"));
     }
 
     #[test]
     fn display_name_plus_as_space() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&dn=hello+world"
-        );
+        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&dn=hello+world");
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.display_name.as_deref(), Some("hello world"));
     }
@@ -417,17 +408,12 @@ mod tests {
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.trackers.len(), 2);
         assert_eq!(link.trackers[0], "udp://tracker1.example.com:6969");
-        assert_eq!(
-            link.trackers[1],
-            "http://tracker2.example.com/announce"
-        );
+        assert_eq!(link.trackers[1], "http://tracker2.example.com/announce");
     }
 
     #[test]
     fn peer_addr_ipv4() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&x.pe=192.168.1.1%3A6881"
-        );
+        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&x.pe=192.168.1.1%3A6881");
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.peer_addrs.len(), 1);
         assert_eq!(
@@ -438,9 +424,7 @@ mod tests {
 
     #[test]
     fn peer_addr_ipv6() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&x.pe=%5B%3A%3A1%5D%3A6881"
-        );
+        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&x.pe=%5B%3A%3A1%5D%3A6881");
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.peer_addrs.len(), 1);
         assert_eq!(
@@ -451,9 +435,7 @@ mod tests {
 
     #[test]
     fn unknown_params_ignored() {
-        let uri = format!(
-            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&foo=bar&baz=qux"
-        );
+        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&foo=bar&baz=qux");
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.info_hash, empty_sha1_bytes());
     }
@@ -519,10 +501,8 @@ mod tests {
 
     #[test]
     fn error_wrong_urn() {
-        let err = MagnetLink::parse(
-            "magnet:?xt=urn:sha1:da39a3ee5e6b4b0d3255bfef95601890afd80709",
-        )
-        .unwrap_err();
+        let err = MagnetLink::parse("magnet:?xt=urn:sha1:da39a3ee5e6b4b0d3255bfef95601890afd80709")
+            .unwrap_err();
         assert!(matches!(err, MagnetError::InvalidInfoHash(_)));
     }
 
@@ -537,8 +517,7 @@ mod tests {
         // 40 chars but contains 'g'
         let bad = "ga39a3ee5e6b4b0d3255bfef95601890afd80709";
         assert_eq!(bad.len(), 40);
-        let err =
-            MagnetLink::parse(&format!("magnet:?xt=urn:btih:{bad}")).unwrap_err();
+        let err = MagnetLink::parse(&format!("magnet:?xt=urn:btih:{bad}")).unwrap_err();
         assert!(matches!(err, MagnetError::InvalidInfoHash(_)));
     }
 
@@ -683,15 +662,15 @@ mod boundary_tests {
         // For input "%AB" (len=3), at i=0: 0 + 2 < 3 is TRUE, so it tries to decode
         // For input "%A" (len=2), at i=0: 0 + 2 < 2 is FALSE, so it doesn't decode
         // For input "X%A" (len=3), at i=1: 1 + 2 < 3 is FALSE, so it doesn't decode - WRONG!
-        
+
         // This is a BUG. The check should be i + 2 <= bytes.len() or i + 3 <= bytes.len()
-        
+
         // %A at position 1 in "X%A":
         // bytes = [X, %, A], len = 3
         // i = 1: bytes[i] == b'%' ? yes
         // i + 2 < bytes.len() ? 1 + 2 < 3 ? FALSE
         // So it falls through and just appends '%', 'A'
-        
+
         let result = percent_decode("X%A");
         // Currently: "X%A" (% is not special)
         assert_eq!(result, "X%A");
@@ -714,7 +693,7 @@ mod boundary_tests {
         // i = 0: 0 + 2 < 2 is FALSE, so doesn't decode
         let result = percent_decode("%4");
         assert_eq!(result, "%4");
-        
+
         // For 3-char input "%41": bytes = [%, 4, 1], len = 3
         // i = 0: 0 + 2 < 3 is TRUE, so it decodes!
         let result2 = percent_decode("%41");
@@ -747,7 +726,7 @@ mod debug_percent_decode {
         // 0 + 2 = 2, 2 < 3 = true
         // So we access bytes[1] and bytes[2]
         // This is CORRECT - we need 3 bytes total (%, hex, hex)
-        
+
         // For input "%4":
         // bytes = [37 (%), 52 (4)]
         // len = 2
@@ -755,7 +734,7 @@ mod debug_percent_decode {
         // 0 + 2 = 2, 2 < 2 = false
         // So we DON'T decode - we just append '%'
         // This is CORRECT
-        
+
         // For input "X%A":
         // bytes = [88 (X), 37 (%), 65 (A)]
         // len = 3
@@ -767,13 +746,13 @@ mod debug_percent_decode {
         // i = 2: bytes[2] == 65 (A), append
         // Result: [X, %, A] = "X%A"
         // This is CORRECT - %A is incomplete
-        
+
         let r1 = percent_decode("%41");
         assert_eq!(r1, "A");
-        
+
         let r2 = percent_decode("%4");
         assert_eq!(r2, "%4");
-        
+
         let r3 = percent_decode("X%A");
         assert_eq!(r3, "X%A");
     }
@@ -888,7 +867,7 @@ mod round_trip_and_display_tests {
         let reparsed1 = MagnetLink::parse(&uri1).unwrap();
         let uri2 = reparsed1.to_string();
         let reparsed2 = MagnetLink::parse(&uri2).unwrap();
-        
+
         // After 2 round-trips, should be identical
         assert_eq!(reparsed1, original);
         assert_eq!(reparsed2, reparsed1);
@@ -903,7 +882,7 @@ mod round_trip_and_display_tests {
                                 &x.pe=192.168.1.1%3A6969";
         let parsed = MagnetLink::parse(original).unwrap();
         let serialized = parsed.to_string();
-        
+
         // The Display impl outputs in a specific order:
         // xt, dn, tr (all of them), x.pe (all of them)
         assert!(serialized.starts_with("magnet:?xt=urn:btih:"));
@@ -979,9 +958,11 @@ mod bep_compliance_tests {
     #[test]
     fn bep9_spec_tr_announce_url() {
         // BEP 9 defines tr as tracker announce URL, can appear multiple times
-        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
+        let uri = format!(
+            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
                           &tr=http%3A%2F%2Ftracker1.example.com%2Fannounce\
-                          &tr=http%3A%2F%2Ftracker2.example.com%2Fannounce");
+                          &tr=http%3A%2F%2Ftracker2.example.com%2Fannounce"
+        );
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.trackers.len(), 2);
     }
@@ -989,8 +970,10 @@ mod bep_compliance_tests {
     #[test]
     fn bep9_spec_x_pe_peer() {
         // Extension: x.pe (peer exchange) - not core to BEP 9 but widely supported
-        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
-                          &x.pe=192.168.1.1%3A6881");
+        let uri = format!(
+            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
+                          &x.pe=192.168.1.1%3A6881"
+        );
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.peer_addrs.len(), 1);
     }
@@ -1008,9 +991,8 @@ mod bep_compliance_tests {
     fn non_btih_urn_scheme_rejected() {
         // Only urn:btih: is supported (v1 hashes)
         // urn:sha1: would be wrong (should be v2)
-        let err = MagnetLink::parse(
-            "magnet:?xt=urn:sha1:da39a3ee5e6b4b0d3255bfef95601890afd80709"
-        ).unwrap_err();
+        let err = MagnetLink::parse("magnet:?xt=urn:sha1:da39a3ee5e6b4b0d3255bfef95601890afd80709")
+            .unwrap_err();
         assert!(matches!(err, MagnetError::InvalidInfoHash(_)));
     }
 
@@ -1020,18 +1002,21 @@ mod bep_compliance_tests {
         // This implementation only supports urn:btih:
         let err = MagnetLink::parse(
             "magnet:?xt=urn:bitprint:da39a3ee5e6b4b0d3255bfef95601890afd80709.0bfe\
-                    4b197367e4dda0992f7c09e6d69e7e6e8cccbec3b8e75c28e2b8a7c7d8e9f0"
-        ).unwrap_err();
+                    4b197367e4dda0992f7c09e6d69e7e6e8cccbec3b8e75c28e2b8a7c7d8e9f0",
+        )
+        .unwrap_err();
         assert!(matches!(err, MagnetError::InvalidInfoHash(_)));
     }
 
     #[test]
     fn unknown_parameters_forward_compatible() {
         // Unknown parameters should be silently ignored (forward compatibility)
-        let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
+        let uri = format!(
+            "magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}\
                           &dn=test\
                           &future-extension=value\
-                          &tr=http%3A%2F%2Ftracker.example.com");
+                          &tr=http%3A%2F%2Ftracker.example.com"
+        );
         let link = MagnetLink::parse(&uri).unwrap();
         assert_eq!(link.display_name.as_deref(), Some("test"));
         assert_eq!(link.trackers.len(), 1);
@@ -1054,7 +1039,10 @@ mod information_disclosure_tests {
         match err {
             MagnetError::InvalidInfoHash(msg) => {
                 // The embedded user input should be truncated to MAX_ERROR_INPUT_LENGTH + "..."
-                assert!(msg.len() <= 200, "error message should not contain the full 200-char input");
+                assert!(
+                    msg.len() <= 200,
+                    "error message should not contain the full 200-char input"
+                );
                 assert!(msg.contains("..."));
             }
             _ => panic!("Expected InvalidInfoHash"),
@@ -1067,7 +1055,7 @@ mod information_disclosure_tests {
         let bad_hash = "ga39a3ee5e6b4b0d3255bfef95601890afd80709";
         let uri = format!("magnet:?xt=urn:btih:{bad_hash}");
         let err = MagnetLink::parse(&uri).unwrap_err();
-        
+
         match err {
             MagnetError::InvalidInfoHash(msg) => {
                 assert!(msg.contains("'g'"));
@@ -1082,7 +1070,7 @@ mod information_disclosure_tests {
         let bad_hash = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1";
         let uri = format!("magnet:?xt=urn:btih:{bad_hash}");
         let err = MagnetLink::parse(&uri).unwrap_err();
-        
+
         match err {
             MagnetError::InvalidInfoHash(msg) => {
                 assert!(msg.contains("'1'"));
@@ -1096,7 +1084,7 @@ mod information_disclosure_tests {
         // Line 111: error message includes the decoded address
         let uri = format!("magnet:?xt=urn:btih:{EMPTY_SHA1_HEX}&x.pe=not-an-address");
         let err = MagnetLink::parse(&uri).unwrap_err();
-        
+
         match err {
             MagnetError::InvalidPeerAddr(msg) => {
                 assert_eq!(msg, "not-an-address");
@@ -1116,14 +1104,14 @@ mod boundary_bug_tests {
         // But what if someone manually calls hex_decode with odd length?
         // The chunks(2) iterator will create a final chunk of size 1
         // Then chunk[1] will panic with index out of bounds!
-        
+
         // But this is NOT reachable in production because:
         // 1. decode_info_hash checks length first (line 161-167)
         // 2. Only calls hex_decode if len == 40 (line 162)
-        
+
         // So this is safe, but the function assumes valid input.
         // If hex_decode is ever made public or used elsewhere, it could be vulnerable.
-        
+
         // For now, let's verify the length check protects us
         let err = MagnetLink::parse("magnet:?xt=urn:btih:abc").unwrap_err();
         assert!(matches!(err, MagnetError::InvalidInfoHash(_)));
@@ -1147,26 +1135,26 @@ mod base32_correctness_tests {
     fn base32_bit_alignment_correctness() {
         // base32_decode processes 5 bits at a time
         // 32 chars * 5 bits = 160 bits = 20 bytes - CORRECT
-        
+
         // The algorithm:
         // - Accumulates bits in u64
         // - Each character adds 5 bits
         // - When accumulated bits >= 8, extracts a byte
         // - Final bits should be exactly 0 (no padding needed)
-        
+
         // For 32 chars exactly:
         // - n_bits goes: 5, 10, 15, 20 (extract 8, n_bits=12), 17, 22 (extract 8, n_bits=14),
         //   19, 24 (extract 8, n_bits=16), 21 (extract 8, n_bits=13), 18, 23 (extract 8, n_bits=15),
         //   20 (extract 8, n_bits=12), 17, 22 (extract 8, n_bits=14), 19, 24 (extract 8, n_bits=16),
         //   21 (extract 8, n_bits=13), 18, 23 (extract 8, n_bits=15), 20 (extract 8, n_bits=12),
         //   17, 22 (extract 8, n_bits=14), 19, 24 (extract 8, n_bits=16), 21, 26 (extract 8, n_bits=18... wait)
-        
+
         // This is getting complex. Let's just verify that base32 round-trips correctly.
-        
+
         let test_hash = [0u8; 20]; // All zeros
         let b32 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         assert_eq!(b32.len(), 32);
-        
+
         let decoded = base32_decode(b32).unwrap();
         assert_eq!(decoded, test_hash);
     }
@@ -1214,14 +1202,14 @@ mod base32_correctness_tests {
         // Both uppercase and lowercase should work
         let hex = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
         let bytes = hex_decode(hex).unwrap();
-        
+
         // Manually create base32 from these bytes
         let b32_upper = base32_encode(&bytes);
         let b32_lower = b32_upper.to_lowercase();
-        
+
         let link_upper = MagnetLink::parse(&format!("magnet:?xt=urn:btih:{b32_upper}")).unwrap();
         let link_lower = MagnetLink::parse(&format!("magnet:?xt=urn:btih:{b32_lower}")).unwrap();
-        
+
         assert_eq!(link_upper.info_hash, link_lower.info_hash);
         assert_eq!(link_upper.info_hash, bytes);
     }

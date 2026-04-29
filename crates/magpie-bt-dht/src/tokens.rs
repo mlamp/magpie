@@ -19,7 +19,7 @@ use sha1::{Digest, Sha1};
 // ---------------------------------------------------------------------------
 
 /// Rotation interval between `current` → `previous` secret swaps.
-pub const TOKEN_ROTATION_INTERVAL: Duration = Duration::from_secs(15 * 60);
+pub const TOKEN_ROTATION_INTERVAL: Duration = Duration::from_mins(15);
 
 /// Bytes of token material placed on the wire (first 8 bytes of the
 /// SHA-1 digest).

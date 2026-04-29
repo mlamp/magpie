@@ -794,7 +794,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(miri, ignore = "binds real multicast socket; miri isolation blocks socket()")]
+    #[cfg_attr(
+        miri,
+        ignore = "binds real multicast socket; miri isolation blocks socket()"
+    )]
     async fn bind_multicast_reuse_addr() {
         // Binding twice to the same multicast port proves SO_REUSEADDR works.
         let addr = SocketAddrV4::new(LSD_MULTICAST_ADDR, LSD_PORT);

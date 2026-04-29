@@ -93,19 +93,16 @@ impl ExtensionHandshake {
                 }
                 let mut map = HashMap::with_capacity(m_dict.len());
                 for (k, v) in m_dict {
-                    let name = std::str::from_utf8(k)
-                        .map_err(|_| ExtensionError::NonUtf8ExtensionName)?;
+                    let name =
+                        std::str::from_utf8(k).map_err(|_| ExtensionError::NonUtf8ExtensionName)?;
                     let id_i64 = v.as_int().ok_or_else(|| {
-                        ExtensionError::Decode(format!(
-                            "extension {name:?} id is not an integer"
-                        ))
+                        ExtensionError::Decode(format!("extension {name:?} id is not an integer"))
                     })?;
-                    let id = u8::try_from(id_i64).map_err(|_| {
-                        ExtensionError::InvalidExtensionId {
+                    let id =
+                        u8::try_from(id_i64).map_err(|_| ExtensionError::InvalidExtensionId {
                             name: name.to_owned(),
                             id: id_i64,
-                        }
-                    })?;
+                        })?;
                     // BEP 10: id 0 means "extension disabled" — skip it.
                     if id == 0 {
                         continue;
@@ -117,7 +114,10 @@ impl ExtensionHandshake {
             None => HashMap::new(),
         };
 
-        let metadata_size = match dict.get(b"metadata_size".as_slice()).and_then(Value::as_int) {
+        let metadata_size = match dict
+            .get(b"metadata_size".as_slice())
+            .and_then(Value::as_int)
+        {
             Some(i) if i < 0 => None,
             Some(i) => {
                 #[allow(clippy::cast_sign_loss)]

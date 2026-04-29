@@ -38,7 +38,7 @@ pub const DEFAULT_OUTBOUND_PER_NODE_BURST: u32 = 30;
 
 /// Default idle-bucket sweep window. Buckets full of tokens that
 /// haven't been touched for this long are pruned.
-pub const DEFAULT_BUCKET_IDLE: Duration = Duration::from_secs(300);
+pub const DEFAULT_BUCKET_IDLE: Duration = Duration::from_mins(5);
 
 // ---------------------------------------------------------------------------
 // Config

@@ -30,10 +30,10 @@ use crate::runtime::DhtRuntime;
 // ---------------------------------------------------------------------------
 
 /// Ping round cadence while bootstrapping.
-pub const DEFAULT_ROUND_INTERVAL: Duration = Duration::from_secs(60);
+pub const DEFAULT_ROUND_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Slower cadence post-stall (reduces wake-up load after 10 min).
-pub const DEFAULT_STALLED_INTERVAL: Duration = Duration::from_secs(5 * 60);
+pub const DEFAULT_STALLED_INTERVAL: Duration = Duration::from_mins(5);
 
 /// Contacts pinged per round.
 pub const DEFAULT_PING_BATCH: usize = 8;
@@ -43,7 +43,7 @@ pub const DEFAULT_EXIT_GOOD_NODES: usize = 32;
 
 /// Stall window. If good-node count < [`DEFAULT_STALL_THRESHOLD`]
 /// after this long, fire the stall signal.
-pub const DEFAULT_STALL_AFTER: Duration = Duration::from_secs(10 * 60);
+pub const DEFAULT_STALL_AFTER: Duration = Duration::from_mins(10);
 
 /// Minimum good-node count below which the stall window applies.
 pub const DEFAULT_STALL_THRESHOLD: usize = 4;

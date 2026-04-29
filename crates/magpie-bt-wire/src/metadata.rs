@@ -175,14 +175,8 @@ impl MetadataMessage {
         };
 
         let mut dict = BTreeMap::new();
-        dict.insert(
-            Cow::Borrowed(&b"msg_type"[..]),
-            Value::Int(msg_type),
-        );
-        dict.insert(
-            Cow::Borrowed(&b"piece"[..]),
-            Value::Int(i64::from(piece)),
-        );
+        dict.insert(Cow::Borrowed(&b"msg_type"[..]), Value::Int(msg_type));
+        dict.insert(Cow::Borrowed(&b"piece"[..]), Value::Int(i64::from(piece)));
         if let Some(ts) = total_size {
             dict.insert(
                 Cow::Borrowed(&b"total_size"[..]),

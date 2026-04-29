@@ -32,7 +32,7 @@ pub const DEFAULT_MAX_PEERS_PER_TORRENT: usize = 100;
 /// Staleness window. Peers we haven't heard `announce_peer` from in
 /// this long are pruned by [`PeerStore::sweep`]. Matches typical
 /// BEP 5 re-announce cadence (≈ 30 min).
-pub const DEFAULT_PEER_STALENESS: Duration = Duration::from_secs(30 * 60);
+pub const DEFAULT_PEER_STALENESS: Duration = Duration::from_mins(30);
 
 // ---------------------------------------------------------------------------
 // Config

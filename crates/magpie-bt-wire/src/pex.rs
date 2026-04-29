@@ -131,11 +131,8 @@ impl PexMessage {
             .ok_or_else(|| PexError::Decode("top-level value is not a dict".into()))?;
 
         // Helper: extract an optional byte-string field.
-        let get_bytes = |key: &[u8]| -> &[u8] {
-            dict.get(key)
-                .and_then(Value::as_bytes)
-                .unwrap_or_default()
-        };
+        let get_bytes =
+            |key: &[u8]| -> &[u8] { dict.get(key).and_then(Value::as_bytes).unwrap_or_default() };
 
         // -- added --
         let added_v4_bytes = get_bytes(b"added");
@@ -527,7 +524,21 @@ mod tests {
         let count = MAX_PEX_PEERS + 1;
         let mut compact = Vec::with_capacity(count * V4_ENTRY);
         for i in 0..count {
-            compact.extend_from_slice(&Ipv4Addr::new(10, 0, #[allow(clippy::cast_possible_truncation)] { (i >> 8) as u8 }, #[allow(clippy::cast_possible_truncation)] { i as u8 }).octets());
+            compact.extend_from_slice(
+                &Ipv4Addr::new(
+                    10,
+                    0,
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        (i >> 8) as u8
+                    },
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        i as u8
+                    },
+                )
+                .octets(),
+            );
             compact.extend_from_slice(&6881u16.to_be_bytes());
         }
         let mut dict: BTreeMap<Cow<'_, [u8]>, Value<'_>> = BTreeMap::new();
@@ -545,7 +556,21 @@ mod tests {
         let count = MAX_PEX_PEERS + 1;
         let mut compact = Vec::with_capacity(count * V4_ENTRY);
         for i in 0..count {
-            compact.extend_from_slice(&Ipv4Addr::new(10, 0, #[allow(clippy::cast_possible_truncation)] { (i >> 8) as u8 }, #[allow(clippy::cast_possible_truncation)] { i as u8 }).octets());
+            compact.extend_from_slice(
+                &Ipv4Addr::new(
+                    10,
+                    0,
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        (i >> 8) as u8
+                    },
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        i as u8
+                    },
+                )
+                .octets(),
+            );
             compact.extend_from_slice(&6881u16.to_be_bytes());
         }
         let mut dict: BTreeMap<Cow<'_, [u8]>, Value<'_>> = BTreeMap::new();
@@ -603,8 +628,21 @@ mod tests {
         let v4_count = MAX_PEX_PEERS;
         let mut compact_v4 = Vec::with_capacity(v4_count * V4_ENTRY);
         for i in 0..v4_count {
-            compact_v4
-                .extend_from_slice(&Ipv4Addr::new(10, 0, #[allow(clippy::cast_possible_truncation)] { (i >> 8) as u8 }, #[allow(clippy::cast_possible_truncation)] { i as u8 }).octets());
+            compact_v4.extend_from_slice(
+                &Ipv4Addr::new(
+                    10,
+                    0,
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        (i >> 8) as u8
+                    },
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        i as u8
+                    },
+                )
+                .octets(),
+            );
             compact_v4.extend_from_slice(&6881u16.to_be_bytes());
         }
         let compact_v6 = encode_compact_v6(&["[::1]:6881".parse().unwrap()]);

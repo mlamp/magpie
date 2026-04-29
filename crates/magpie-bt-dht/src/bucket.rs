@@ -26,12 +26,12 @@ pub const MAX_CONSECUTIVE_FAILURES: u8 = 5;
 
 /// Time since `last_seen` beyond which a [`NodeQuality::Good`] node
 /// becomes [`NodeQuality::Questionable`]. ADR-0024.
-pub const QUESTIONABLE_AFTER: Duration = Duration::from_secs(15 * 60);
+pub const QUESTIONABLE_AFTER: Duration = Duration::from_mins(15);
 
 /// Grace window after reaching [`NodeQuality::Bad`] before the node
 /// is evicted outright. Kept so a transient NAT rebind doesn't cost
 /// us a known contact permanently. ADR-0024 § "Node-quality".
-pub const BAD_REMOVE_AFTER: Duration = Duration::from_secs(4 * 60 * 60);
+pub const BAD_REMOVE_AFTER: Duration = Duration::from_hours(4);
 
 // ---------------------------------------------------------------------------
 // NodeQuality
