@@ -611,9 +611,9 @@ mod tests {
         assert_eq!(retry_timeout(0), Duration::from_secs(15));
         assert_eq!(retry_timeout(1), Duration::from_secs(30));
         assert_eq!(retry_timeout(2), Duration::from_mins(1));
-        assert_eq!(retry_timeout(7), Duration::from_secs(1920));
-        assert_eq!(retry_timeout(8), Duration::from_secs(3840)); // cap
-        assert_eq!(retry_timeout(20), Duration::from_secs(3840));
+        assert_eq!(retry_timeout(7), Duration::from_mins(32));
+        assert_eq!(retry_timeout(8), Duration::from_mins(64)); // cap
+        assert_eq!(retry_timeout(20), Duration::from_mins(64));
     }
 
     // ---- UdpTracker client tests -----------------------------------

@@ -80,7 +80,14 @@ fn main() {
     // third-party leecher rather than a .torrent file. The seeder still
     // loads the `.torrent` for the seed-side path; only the leecher
     // bootstraps from the magnet URI.
-    let info_hash_hex: String = synth.info_hash.iter().map(|b| format!("{b:02x}")).collect();
+    let info_hash_hex = synth.info_hash.iter().fold(
+        String::with_capacity(synth.info_hash.len() * 2),
+        |mut acc, b| {
+            use std::fmt::Write;
+            let _ = write!(acc, "{b:02x}");
+            acc
+        },
+    );
     let magnet_uri = format!(
         "magnet:?xt=urn:btih:{info_hash_hex}&dn={dn}&tr={tr}",
         dn = url_encode(&name),
@@ -106,13 +113,16 @@ fn main() {
 /// everything except unreserved ASCII (A-Z a-z 0-9 - _ . ~). Avoids a
 /// dependency on a full URL crate for a one-shot CLI.
 fn url_encode(s: &str) -> String {
+    use std::fmt::Write;
     let mut out = String::with_capacity(s.len());
     for b in s.as_bytes() {
         match *b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
                 out.push(*b as char);
             }
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
