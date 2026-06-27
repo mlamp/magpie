@@ -39,7 +39,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        # Do NOT add `--locked` here. cargo-fuzz's *packaged* Cargo.lock pins an
+        # old `rustix` that relies on compiler-internal `rustc_*` attributes the
+        # current nightly rustc rejects ("attributes starting with `rustc` are
+        # reserved..."), which broke every fuzz job for weeks (issue #1).
+        # Without `--locked`, cargo re-resolves and picks a `rustix` compatible
+        # with the nightly toolchain installed above.
+        run: cargo install cargo-fuzz
       - name: Run fuzz target
         working-directory: crates/${{ matrix.crate }}
         run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
