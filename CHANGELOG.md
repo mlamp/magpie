@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (bencode — decoder node budget, #4)
+
+`magpie-bt-bencode`'s decoder now bounds the **total number of values** it will
+materialise, closing an allocation-amplification gap where a small input (a flat
+list of empty containers) could expand into a large `Value`-tree allocation.
+
+- New `DecodeOptions::max_nodes` (`u32`) with `DEFAULT_MAX_NODES = 2_000_000`,
+  mirroring libtorrent-rasterbar's `bdecode` token budget. Every int, byte
+  string, list, and dict counts as one node; exceeding the budget fails with the
+  new `DecodeErrorKind::NodeLimitExceeded { max }`.
+- Enforced only on the allocating paths (`decode`, `decode_with`,
+  `decode_prefix`, `decode_prefix_with`); the non-allocating walkers
+  (`skip_value`, `dict_value_span`) are intentionally exempt so info-hash span
+  extraction over large metainfo is unaffected.
+- New `decode_prefix_with(input, opts)` mirrors `decode_with` for the
+  prefix-decoding path, so a framing-layer caller can apply a custom budget.
+- The default is orders of magnitude above any real-world torrent, so existing
+  callers see no behaviour change.
+
 ### Added (M4 gate #2 — three-engine DHT-only swarm download)
 
 Milestone hard-gate landed. Three magpie `Engine`s on loopback,

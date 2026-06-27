@@ -55,6 +55,12 @@ pub enum DecodeErrorKind {
         /// Configured maximum depth.
         max: u32,
     },
+    /// The number of values materialised exceeded the configured maximum.
+    #[error("node count exceeded maximum of {max}")]
+    NodeLimitExceeded {
+        /// Configured maximum node count.
+        max: u32,
+    },
     /// Input contained additional bytes after a fully-parsed root value.
     #[error("trailing data after root value")]
     TrailingData,
