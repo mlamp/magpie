@@ -4,6 +4,9 @@
 //! - dictionary keys must be in strict lexicographic order (duplicates rejected);
 //! - integers must follow BEP 3 exactly (no leading zeros, no `-0`);
 //! - nesting depth is capped (default [`DEFAULT_MAX_DEPTH`]);
+//! - the total number of materialised values is capped (default
+//!   [`DEFAULT_MAX_NODES`]) so a small input cannot amplify into a huge
+//!   allocation;
 //! - byte-string lengths are clamped to the remaining input before allocation.
 //!
 //! Byte strings are returned as [`std::borrow::Cow::Borrowed`] references into
@@ -22,6 +25,19 @@ use crate::value::Value;
 /// real-world torrent encountered in the wild.
 pub const DEFAULT_MAX_DEPTH: u32 = 256;
 
+/// Default maximum number of values [`decode`] will materialise.
+///
+/// Every integer, byte string, list, and dictionary in the decoded tree counts
+/// as one node. Because the smallest encodable value is two bytes (`le`, `de`,
+/// `0:`) while a [`Value`] node is tens of bytes, an unbounded decode lets a
+/// small input amplify into a large allocation; this ceiling bounds the total
+/// spine allocation to the low hundreds of MiB at worst.
+///
+/// Matches the default token budget of libtorrent-rasterbar's `bdecode`
+/// (`token_limit`) and is far above any real-world torrent (even a
+/// multi-thousand-entry `files` list is orders of magnitude below it).
+pub const DEFAULT_MAX_NODES: u32 = 2_000_000;
+
 /// Tunable decoder limits.
 ///
 /// Construct with [`DecodeOptions::default`] and override fields as needed.
@@ -31,12 +47,20 @@ pub struct DecodeOptions {
     /// Maximum nesting depth. Inputs exceeding this are rejected with
     /// [`DecodeErrorKind::DepthExceeded`].
     pub max_depth: u32,
+    /// Maximum number of values to materialise. Inputs whose decoded tree would
+    /// contain more nodes than this are rejected with
+    /// [`DecodeErrorKind::NodeLimitExceeded`]. Applies only to the allocating
+    /// decode paths ([`decode`], [`decode_with`], [`decode_prefix`],
+    /// [`decode_prefix_with`]); the non-allocating walkers ([`skip_value`],
+    /// [`dict_value_span`]) ignore it.
+    pub max_nodes: u32,
 }
 
 impl Default for DecodeOptions {
     fn default() -> Self {
         Self {
             max_depth: DEFAULT_MAX_DEPTH,
+            max_nodes: DEFAULT_MAX_NODES,
         }
     }
 }
@@ -72,8 +96,19 @@ pub fn decode_with(input: &[u8], opts: DecodeOptions) -> Result<Value<'_>, Decod
 /// # Errors
 /// See [`decode`].
 pub fn decode_prefix(input: &[u8]) -> Result<(Value<'_>, &[u8]), DecodeError> {
+    decode_prefix_with(input, DecodeOptions::default())
+}
+
+/// [`decode_prefix`] with explicit [`DecodeOptions`].
+///
+/// # Errors
+/// See [`decode_prefix`].
+pub fn decode_prefix_with(
+    input: &[u8],
+    opts: DecodeOptions,
+) -> Result<(Value<'_>, &[u8]), DecodeError> {
     let mut cur = Cursor::new(input);
-    let value = parse_value(&mut cur, DecodeOptions::default(), 0)?;
+    let value = parse_value(&mut cur, opts, 0)?;
     Ok((value, &input[cur.pos..]))
 }
 
@@ -165,11 +200,30 @@ pub fn dict_value_span(
 struct Cursor<'a> {
     buf: &'a [u8],
     pos: usize,
+    /// Number of [`Value`] nodes materialised so far, charged by
+    /// [`Cursor::charge_node`]. Only the allocating decode paths charge nodes;
+    /// the non-allocating walkers leave this at zero.
+    nodes: u32,
 }
 
 impl<'a> Cursor<'a> {
     const fn new(buf: &'a [u8]) -> Self {
-        Self { buf, pos: 0 }
+        Self {
+            buf,
+            pos: 0,
+            nodes: 0,
+        }
+    }
+
+    /// Accounts for one materialised value, rejecting the input once `max`
+    /// nodes have already been charged. Checking before incrementing admits
+    /// exactly `max` nodes and never overflows `nodes` (it stays `<= max`).
+    const fn charge_node(&mut self, max: u32) -> Result<(), DecodeError> {
+        if self.nodes >= max {
+            return Err(self.err(DecodeErrorKind::NodeLimitExceeded { max }));
+        }
+        self.nodes += 1;
+        Ok(())
     }
 
     fn peek(&self) -> Option<u8> {
@@ -284,6 +338,12 @@ fn parse_value<'a>(
     let b = cur
         .peek()
         .ok_or_else(|| cur.err(DecodeErrorKind::UnexpectedEof))?;
+    // Charge one node per materialised value. `parse_value` is the single
+    // choke point for every node in the tree (root, list items, dict values),
+    // so this bounds total allocation regardless of how nodes are distributed.
+    // Charged after the EOF check so a truncated input still reports
+    // `UnexpectedEof` rather than the budget error when the budget is exhausted.
+    cur.charge_node(opts.max_nodes)?;
     match b {
         b'i' => parse_int(cur),
         b'l' => parse_list(cur, opts, depth),
@@ -640,5 +700,83 @@ mod tests {
         let base = input.as_ptr() as usize;
         let slice = b.as_ptr() as usize;
         assert!(slice >= base && slice + b.len() <= base + input.len());
+    }
+
+    fn with_nodes(max_nodes: u32) -> DecodeOptions {
+        DecodeOptions {
+            max_nodes,
+            ..DecodeOptions::default()
+        }
+    }
+
+    #[test]
+    fn node_limit_rejects_over_budget_list() {
+        // `li0ei1ee` = list (1) + two ints (2) = 3 nodes.
+        assert!(decode_with(b"li0ei1ee", with_nodes(3)).is_ok());
+        let err = decode_with(b"li0ei1ee", with_nodes(2)).unwrap_err();
+        assert_eq!(err.kind, DecodeErrorKind::NodeLimitExceeded { max: 2 });
+        // Offset points at the first byte of the over-budget value (`i1e`).
+        assert_eq!(err.offset, 4);
+    }
+
+    #[test]
+    fn node_limit_rejects_over_budget_dict() {
+        // `d1:ai0e1:bi1ee` = dict (1) + two int values (2) = 3 nodes.
+        // Keys are not charged.
+        assert!(decode_with(b"d1:ai0e1:bi1ee", with_nodes(3)).is_ok());
+        let err = decode_with(b"d1:ai0e1:bi1ee", with_nodes(2)).unwrap_err();
+        assert_eq!(err.kind, DecodeErrorKind::NodeLimitExceeded { max: 2 });
+        // Offset points at the over-budget value (`i1e`), past its key `1:b`.
+        assert_eq!(err.offset, 10);
+    }
+
+    #[test]
+    fn node_limit_boundary_is_exact() {
+        // A bare scalar is exactly one node.
+        assert!(decode_with(b"i0e", with_nodes(1)).is_ok());
+        // Zero budget rejects even the root.
+        let err = decode_with(b"i0e", with_nodes(0)).unwrap_err();
+        assert_eq!(err.kind, DecodeErrorKind::NodeLimitExceeded { max: 0 });
+        assert_eq!(err.offset, 0);
+    }
+
+    #[test]
+    fn node_limit_counts_nested_nodes() {
+        // `ll0:ee` = outer list (1) + inner list (1) + empty bytes (1) = 3 nodes.
+        assert!(decode_with(b"ll0:ee", with_nodes(3)).is_ok());
+        assert!(matches!(
+            decode_with(b"ll0:ee", with_nodes(2)).unwrap_err().kind,
+            DecodeErrorKind::NodeLimitExceeded { max: 2 }
+        ));
+    }
+
+    #[test]
+    fn node_limit_error_displays_max() {
+        let err = decode_with(b"li0ee", with_nodes(1)).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "bencode decode error at offset 1: node count exceeded maximum of 1"
+        );
+    }
+
+    #[test]
+    fn node_limit_applies_to_decode_prefix() {
+        // `li0ee` = list (1) + int (1) = 2 nodes, followed by trailing bytes.
+        let (v, rest) = decode_prefix_with(b"li0eerest", with_nodes(2)).unwrap();
+        assert!(v.as_list().is_some());
+        assert_eq!(rest, b"rest");
+        // One fewer node than the prefix needs is rejected at the int item.
+        let err = decode_prefix_with(b"li0eerest", with_nodes(1)).unwrap_err();
+        assert_eq!(err.kind, DecodeErrorKind::NodeLimitExceeded { max: 1 });
+        assert_eq!(err.offset, 1);
+    }
+
+    #[test]
+    fn node_limit_ignored_by_walkers() {
+        // The non-allocating walkers never charge nodes, so even a budget of
+        // zero leaves them working over arbitrarily large structures.
+        let input = b"d4:infod4:name5:helloee";
+        assert!(skip_value_with(input, with_nodes(0)).is_ok());
+        assert!(dict_value_span(input, b"info").unwrap().is_some());
     }
 }

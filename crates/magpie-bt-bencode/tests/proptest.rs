@@ -8,8 +8,18 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use magpie_bt_bencode::{Value, decode, encode};
+use magpie_bt_bencode::{DecodeErrorKind, DecodeOptions, Value, decode, decode_with, encode};
 use proptest::prelude::*;
+
+/// Total number of `Value` nodes in a tree — the quantity the decoder charges
+/// against [`DecodeOptions::max_nodes`].
+fn count_nodes(v: &Value) -> u32 {
+    1 + match v {
+        Value::List(items) => items.iter().map(count_nodes).sum(),
+        Value::Dict(m) => m.values().map(count_nodes).sum(),
+        _ => 0,
+    }
+}
 
 fn arb_value() -> impl Strategy<Value = Value<'static>> {
     let leaf = prop_oneof![
@@ -51,5 +61,23 @@ proptest! {
     fn decoder_never_panics_on_arbitrary_bytes(raw in prop::collection::vec(any::<u8>(), 0..256)) {
         // Result may be Ok or Err — we only guarantee no panic.
         let _ = decode(&raw);
+    }
+
+    /// The node budget is exact: a tree of `n` nodes decodes with `max_nodes = n`
+    /// and is rejected with `max_nodes = n - 1`.
+    #[test]
+    fn node_budget_is_exact(v in arb_value()) {
+        let bytes = encode(&v);
+        let n = count_nodes(&v);
+
+        let mut at_budget = DecodeOptions::default();
+        at_budget.max_nodes = n;
+        prop_assert!(decode_with(&bytes, at_budget).is_ok());
+
+        let mut under_budget = DecodeOptions::default();
+        under_budget.max_nodes = n - 1; // `n >= 1` always (the root counts).
+        let err = decode_with(&bytes, under_budget).unwrap_err();
+        let is_node_limit = matches!(err.kind, DecodeErrorKind::NodeLimitExceeded { .. });
+        prop_assert!(is_node_limit, "expected NodeLimitExceeded, got {:?}", err.kind);
     }
 }

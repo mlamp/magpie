@@ -2,8 +2,8 @@
 //! codec for the magpie BitTorrent library.
 //!
 //! - Decoder: strict by default (rejects unsorted / duplicate dict keys, `-0`,
-//!   leading zeros, excessive nesting); returns a [`Value`] tree whose byte
-//!   strings borrow from the input.
+//!   leading zeros, excessive nesting, and over-budget node counts); returns a
+//!   [`Value`] tree whose byte strings borrow from the input.
 //! - Encoder: always emits canonical output (BTreeMap-sorted keys, no slack).
 //! - Errors: typed [`DecodeError`] with byte offsets for precise diagnostics.
 //!
@@ -29,8 +29,8 @@ mod error;
 mod value;
 
 pub use decode::{
-    DEFAULT_MAX_DEPTH, DecodeOptions, decode, decode_prefix, decode_with, dict_value_span,
-    skip_value, skip_value_with,
+    DEFAULT_MAX_DEPTH, DEFAULT_MAX_NODES, DecodeOptions, decode, decode_prefix, decode_prefix_with,
+    decode_with, dict_value_span, skip_value, skip_value_with,
 };
 pub use encode::{encode, encode_into};
 pub use error::{DecodeError, DecodeErrorKind};
