@@ -353,7 +353,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2",
+ "socket2 0.6.3",
  "tokio",
  "tower-service",
  "tracing",
@@ -552,14 +552,14 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "magpie-bt-bencode"
-version = "0.0.1"
+version = "0.1.3"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "magpie-bt-core"
-version = "0.0.1"
+version = "0.1.3"
 dependencies = [
  "bytes",
  "futures-util",
@@ -568,6 +568,7 @@ dependencies = [
  "magpie-bt-metainfo",
  "magpie-bt-wire",
  "reqwest",
+ "socket2 0.5.10",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -584,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "magpie-bt-metainfo"
-version = "0.0.1"
+version = "0.1.3"
 dependencies = [
  "magpie-bt-bencode",
  "sha1",
@@ -594,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "magpie-bt-wire"
-version = "0.0.1"
+version = "0.1.3"
 dependencies = [
  "bytes",
  "magpie-bt-bencode",
@@ -677,7 +678,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2",
+ "socket2 0.6.3",
  "thiserror",
  "tokio",
  "tracing",
@@ -714,7 +715,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -851,9 +852,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.11"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a6af516fea4b20eccceaf166e8aa666ac996208e8a644ce3ef5aa783bc7cd4"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -969,6 +970,16 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "socket2"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "socket2"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
@@ -1075,7 +1086,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
- "socket2",
+ "socket2 0.6.3",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]
